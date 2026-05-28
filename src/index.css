@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #080810;
+  font-family: 'Inter', -apple-system, sans-serif;
+  overflow: hidden;
+  height: 100dvh;
+  min-height: 100vh;
+}
+
+#root {
+  height: 100dvh;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #080810;
+}
+
+.app {
+  width: 390px;
+  height: 100dvh;
+  background: #080810;
+  border-radius: 50px;
+  border: 1px solid #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+@keyframes newsCardBorderSpin {
+  to { transform: rotate(360deg); }
+}

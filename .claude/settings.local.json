@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(git *)",
+      "Bash(Test-Path *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ZenDoX\\\\ios-pau\" -Recurse -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer -and \\($_.Name -match '[Nn]ews|[Nn]oticia|[Cc]ard'\\) } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ZenDoX\\\\ios-pau\" -Exclude node_modules -Recurse -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | Select-Object -ExpandProperty FullName | Select-Object -First 100)",
+      "Bash(cmd *)",
+      "Bash(supabase functions *)",
+      "Bash(npx supabase *)",
+      "Bash(Get-ChildItem -Path . -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Get-ChildItem -Recurse -Filter \"JournalScreen.tsx\" -Path \"C:\\\\Users\\\\ZenDoX\\\\ios-pau\")",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}
