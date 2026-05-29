@@ -527,13 +527,13 @@ function NewsDetailSheet({ item, onClose }: { item: NewsItem; onClose: () => voi
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100 }}
       />
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 390, zIndex: 101 }}>
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
           background: '#0d0d0d', borderRadius: '24px 24px 0 0',
-          maxHeight: '85vh', overflowY: 'auto', zIndex: 101,
+          maxHeight: '85vh', overflowY: 'auto',
           border: '0.5px solid rgba(255,255,255,0.08)',
         }}
       >
@@ -587,6 +587,7 @@ function NewsDetailSheet({ item, onClose }: { item: NewsItem; onClose: () => voi
           )}
         </div>
       </motion.div>
+      </div>
     </>
   )
 }
@@ -675,10 +676,11 @@ function AddSymbolSheet({ existing, onAdd, onClose }: { existing: string[]; onAd
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100 }} />
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 390, zIndex: 101 }}>
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d0d0d', borderRadius: '20px 20px 0 0', padding: '16px 20px 48px', zIndex: 101 }}
+        style={{ background: '#0d0d0d', borderRadius: '20px 20px 0 0', padding: '16px 20px 48px' }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#222' }} />
@@ -701,6 +703,7 @@ function AddSymbolSheet({ existing, onAdd, onClose }: { existing: string[]; onAd
           </button>
         </div>
       </motion.div>
+      </div>
     </>
   )
 }

@@ -173,13 +173,13 @@ function ProgressModal({
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 100 }}
       />
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 390, zIndex: 101 }}>
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
           background: '#0d0d0d', borderRadius: '24px 24px 0 0',
-          maxHeight: '92vh', overflowY: 'auto', zIndex: 101,
+          maxHeight: '92vh', overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
@@ -311,6 +311,7 @@ function ProgressModal({
 
         </div>
       </motion.div>
+      </div>
 
       {/* Duplicate confirmation — fixed above everything */}
       <AnimatePresence>
@@ -318,7 +319,9 @@ function ProgressModal({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{
-              position: 'fixed', inset: 0, zIndex: 200,
+              position: 'fixed', top: 0, bottom: 0,
+              left: '50%', transform: 'translateX(-50%)',
+              width: '100%', maxWidth: 390, zIndex: 200,
               background: 'rgba(0,0,0,0.93)',
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
@@ -385,13 +388,13 @@ function ProgressDetailModal({ entry, onClose }: { entry: ProgressEntry; onClose
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 100 }}
       />
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 390, zIndex: 101 }}>
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
           background: '#0d0d0d', borderRadius: '24px 24px 0 0',
-          maxHeight: '88vh', overflowY: 'auto', zIndex: 101,
+          maxHeight: '88vh', overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
@@ -495,6 +498,7 @@ function ProgressDetailModal({ entry, onClose }: { entry: ProgressEntry; onClose
           )}
         </div>
       </motion.div>
+      </div>
     </>
   )
 }
