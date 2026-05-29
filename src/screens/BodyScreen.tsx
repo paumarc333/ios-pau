@@ -962,10 +962,7 @@ export default function BodyScreen() {
 
   const dayCircleColor = (day: WeekDay) => {
     if (day.calories === 0) return '#1e1e1e'
-    const pct = day.calories / goalCalories
-    if (pct >= 1) return '#2ecc71'
-    if (pct >= 0.8) return '#f39c12'
-    return '#1e1e1e'
+    return day.calories >= goalCalories ? '#2ecc71' : '#e05555'
   }
 
   const weekMax = Math.max(goalCalories * 1.5, ...weekData.map(d => d.calories), 1)
