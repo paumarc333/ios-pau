@@ -1,0 +1,2 @@
+[functions.transcribe]
+verify_jwt = false
