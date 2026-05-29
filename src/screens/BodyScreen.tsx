@@ -960,10 +960,15 @@ export default function BodyScreen() {
   )
 
 
-  const dayCircleColor = (day: WeekDay) => {
-    if (day.calories === 0) return '#1e1e1e'
-    return day.calories >= goalCalories ? '#2ecc71' : '#e05555'
+  const dayCalColor = (calories: number) => {
+    if (calories === 0) return null
+    const pct = calories / goalCalories
+    if (pct >= 1)   return '#2ecc71'
+    if (pct >= 0.8) return '#f39c12'
+    return '#e05555'
   }
+
+  const dayCircleColor = (day: WeekDay) => dayCalColor(day.calories) ?? '#1e1e1e'
 
   const weekMax = Math.max(goalCalories * 1.5, ...weekData.map(d => d.calories), 1)
 
@@ -1265,9 +1270,9 @@ export default function BodyScreen() {
                       transition={{ duration: 0.9, delay: i * 0.06, ease: [0.4, 0, 0.2, 1] }}
                       style={{
                         width: '100%', maxWidth: 28, borderRadius: 6,
-                        background: day.calories > 0 ? 'linear-gradient(to top, #8B5CF6, #EC4899)' : '#141414',
-                        opacity: day.isToday ? 1 : day.calories > 0 ? 0.55 : 1,
-                        boxShadow: day.isToday && day.calories > 0 ? '0 0 12px rgba(139,92,246,0.35)' : 'none',
+                        background: dayCalColor(day.calories) ?? '#141414',
+                        opacity: day.isToday ? 1 : day.calories > 0 ? 0.6 : 1,
+                        boxShadow: day.isToday && day.calories > 0 ? '0 0 10px rgba(255,255,255,0.12)' : 'none',
                       }}
                     />
                   </div>
