@@ -13,9 +13,9 @@ const INSIGHT_TTL    = 30 * 24 * 3600 * 1000
 type JournalEntry = {
   id: string
   date: string
-  mood_score: number
-  notes: string | null
-  atlas_reflection: string | null
+  mood: number
+  thought1: string | null
+  thought2: string | null
   created_at: string
 }
 
@@ -270,8 +270,8 @@ export default function JournalScreen() {
   // ── Edit mode init ─────────────────────────────────────
   const startEdit = () => {
     if (!todayEntry) return
-    setScore(todayEntry.mood_score)
-    setNotes(todayEntry.notes ?? '')
+    setScore(todayEntry.mood)
+    setNotes(todayEntry.thought1 ?? '')
     setEditMode(true)
   }
 
@@ -289,7 +289,7 @@ export default function JournalScreen() {
       if (editMode && todayEntry) {
         const { data, error } = await supabase
           .from('journal_entries')
-          .update({ mood_score: score, notes })
+          .update({ mood: score, thought1: notes })
           .eq('id', todayEntry.id)
           .select('id')
           .single()
@@ -298,7 +298,7 @@ export default function JournalScreen() {
       } else {
         const { data, error } = await supabase
           .from('journal_entries')
-          .insert([{ date: today, mood_score: score, notes }])
+          .insert([{ date: today, mood: score, thought1: notes }])
           .select('id')
           .single()
         if (error) throw error
@@ -334,7 +334,7 @@ export default function JournalScreen() {
       if (reflection) {
         await supabase
           .from('journal_entries')
-          .update({ atlas_reflection: reflection })
+          .update({ thought2: reflection })
           .eq('id', entryId)
       }
 
@@ -374,7 +374,7 @@ export default function JournalScreen() {
     try {
       const allEntries = [...(todayEntry ? [todayEntry] : []), ...history].slice(0, 30)
       const dataStr = allEntries
-        .map(e => `${e.date}: ${e.mood_score}/10${e.notes ? ` — ${e.notes}` : ''}`)
+        .map(e => `${e.date}: ${e.mood}/10${e.thought1 ? ` — ${e.thought1}` : ''}`)
         .join('\n')
 
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -552,22 +552,22 @@ export default function JournalScreen() {
                 style={{ marginTop: 32 }}
               >
                 {/* Read-only slider */}
-                <NeonSlider score={todayEntry.mood_score} readOnly />
+                <NeonSlider score={todayEntry.mood} readOnly />
 
                 {/* Notes */}
-                {todayEntry.notes && (
+                {todayEntry.thought1 && (
                   <div style={{
                     marginTop: 20, fontSize: 14, color: 'rgba(255,255,255,0.55)',
                     lineHeight: 1.7, padding: '14px', borderRadius: 14,
                     background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.06)',
                   }}>
-                    {todayEntry.notes}
+                    {todayEntry.thought1}
                   </div>
                 )}
 
                 {/* Atlas reflection */}
-                {todayEntry.atlas_reflection && (
-                  <ReflectionCard text={todayEntry.atlas_reflection} />
+                {todayEntry.thought2 && (
+                  <ReflectionCard text={todayEntry.thought2} />
                 )}
 
                 {/* Edit button */}
@@ -596,8 +596,8 @@ export default function JournalScreen() {
                 <div>
                   {history.map((entry, i) => {
                     const isExpanded = expandedId === entry.id
-                    const eColor     = getScoreColor(entry.mood_score)
-                    const eGradient  = getScoreGradient(entry.mood_score)
+                    const eColor     = getScoreColor(entry.mood)
+                    const eGradient  = getScoreGradient(entry.mood)
 
                     return (
                       <div key={entry.id}>
@@ -618,14 +618,14 @@ export default function JournalScreen() {
                             {/* Score bar */}
                             <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
                               <div style={{
-                                width: `${entry.mood_score * 10}%`, height: '100%',
+                                width: `${entry.mood * 10}%`, height: '100%',
                                 background: eGradient, borderRadius: 2,
                               }} />
                             </div>
 
                             {/* Score label */}
                             <div style={{ fontSize: 12, color: eColor, fontWeight: 500, minWidth: 32, textAlign: 'right' }}>
-                              {entry.mood_score}/10
+                              {entry.mood}/10
                             </div>
 
                             {/* Expand icon */}
@@ -648,7 +648,7 @@ export default function JournalScreen() {
                               style={{ overflow: 'hidden' }}
                             >
                               <div style={{ paddingBottom: 14 }}>
-                                {entry.notes && (
+                                {entry.thought1 && (
                                   <div style={{
                                     fontSize: 13, color: 'rgba(255,255,255,0.5)',
                                     lineHeight: 1.65, marginBottom: 8,
@@ -656,10 +656,10 @@ export default function JournalScreen() {
                                     background: 'rgba(255,255,255,0.04)',
                                     border: '0.5px solid rgba(255,255,255,0.05)',
                                   }}>
-                                    {entry.notes}
+                                    {entry.thought1}
                                   </div>
                                 )}
-                                {entry.atlas_reflection && (
+                                {entry.thought2 && (
                                   <div style={{
                                     background: 'rgba(139,92,246,0.07)',
                                     border: '0.5px solid rgba(139,92,246,0.2)',
@@ -670,7 +670,7 @@ export default function JournalScreen() {
                                       <span style={{ fontSize: 9, color: '#06B6D4', letterSpacing: '1px' }}>ATLAS</span>
                                     </div>
                                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.65 }}>
-                                      {entry.atlas_reflection}
+                                      {entry.thought2}
                                     </div>
                                   </div>
                                 )}
