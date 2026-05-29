@@ -1270,9 +1270,9 @@ export default function BodyScreen() {
                       transition={{ duration: 0.9, delay: i * 0.06, ease: [0.4, 0, 0.2, 1] }}
                       style={{
                         width: '100%', maxWidth: 28, borderRadius: 6,
-                        background: dayCalColor(day.calories) ?? '#141414',
-                        opacity: day.isToday ? 1 : day.calories > 0 ? 0.6 : 1,
-                        boxShadow: day.isToday && day.calories > 0 ? '0 0 10px rgba(255,255,255,0.12)' : 'none',
+                        background: day.calories > 0 ? 'linear-gradient(to top, #8B5CF6, #EC4899)' : '#141414',
+                        opacity: day.isToday ? 1 : day.calories > 0 ? 0.55 : 1,
+                        boxShadow: day.isToday && day.calories > 0 ? '0 0 12px rgba(139,92,246,0.35)' : 'none',
                       }}
                     />
                   </div>
