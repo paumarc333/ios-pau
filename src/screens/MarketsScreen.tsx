@@ -652,6 +652,7 @@ export default function MarketsScreen() {
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   const [deepResearchFetched, setDeepResearchFetched] = useState<Date | null>(null)
   const [researchVisible, setResearchVisible] = useState(false)
+  const [newsAnimKey,     setNewsAnimKey]     = useState(0)
 
   const newsFetched = useRef(false)
   const newsLoading = useRef(false)
@@ -711,6 +712,7 @@ export default function MarketsScreen() {
   useEffect(() => { loadIndices() },        [loadIndices])
   useEffect(() => { loadWatchlist(symbols) }, [symbols, loadWatchlist])
   useEffect(() => { loadNews() },           [loadNews])
+  useEffect(() => { if (news.length > 0) setNewsAnimKey(k => k + 1) }, [news])
   useEffect(() => {
     try {
       const cached = localStorage.getItem(DEEP_RESEARCH_KEY)
@@ -1030,11 +1032,11 @@ export default function MarketsScreen() {
 
           {/* Uniform news list with stagger */}
           {!loadingNews && news.length > 0 && (
-            <>
+            <div key={newsAnimKey}>
               {news.map((item, i) => (
                 <NewsRow key={item.id} item={item} index={i} isLast={i === news.length - 1} />
               ))}
-            </>
+            </div>
           )}
 
           {/* Empty state */}
