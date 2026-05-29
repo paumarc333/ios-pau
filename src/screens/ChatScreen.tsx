@@ -219,6 +219,7 @@ export default function ChatScreen({ isActive }: { isActive: boolean }) {
   const [isRecording,    setIsRecording]    = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [recordSeconds,  setRecordSeconds]  = useState(0)
+  const [recordError,    setRecordError]    = useState(false)
 
   const bottomRef        = useRef<HTMLDivElement>(null)
   const fileInputRef     = useRef<HTMLInputElement>(null)
@@ -584,9 +585,6 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
   const toggleRecording = async () => {
     if (isTranscribing) return
 
-    console.log('Iniciando grabación...')
-    console.log('getUserMedia disponible:', !!navigator.mediaDevices?.getUserMedia)
-
     if (isRecording) {
       mediaRecorderRef.current?.stop()
       if (recordTimerRef.current) clearInterval(recordTimerRef.current)
@@ -595,13 +593,24 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
       return
     }
 
+    setRecordError(false)
+
     try {
+      console.log('[Mic] Solicitando permiso micrófono…')
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
+      console.log('[Mic] Permiso concedido')
+
+      // iOS Safari only supports audio/mp4; Chrome supports webm
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm'
+      console.log('[Mic] mimeType elegido:', mimeType)
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
-
-      console.log('Grabando...')
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data)
@@ -609,38 +618,58 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-        console.log('Parando grabación, blob size:', blob.size)
+        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        console.log('[Mic] Blob size:', blob.size, '— type:', mimeType)
+
+        if (blob.size === 0) {
+          console.error('[Mic] Blob vacío, abortando')
+          setRecordError(true)
+          return
+        }
+
         setIsTranscribing(true)
         try {
+          const ext = mimeType.startsWith('audio/mp4') ? 'mp4' : 'webm'
           const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`
-          console.log('Enviando a transcribe...')
-          console.log('URL:', url)
+          console.log('[Mic] Enviando a transcribe — ext:', ext, 'url:', url)
+
           const formData = new FormData()
-          formData.append('file', blob, 'recording.webm')
+          formData.append('file', blob, `recording.${ext}`)
+
           const res = await fetch(url, {
             method: 'POST',
             headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
             body: formData,
           })
-          console.log('Status:', res.status)
+
+          console.log('[Mic] Status:', res.status)
           const data = await res.json()
-          console.log('Respuesta transcribe:', data)
-          if (data.text) setInput(prev => prev ? `${prev} ${data.text}` : data.text)
+          console.log('[Mic] Respuesta transcribe:', data)
+
+          if (data.text) {
+            setInput(prev => prev ? `${prev} ${data.text}` : data.text)
+          } else {
+            console.error('[Mic] Sin texto en respuesta:', data)
+            setRecordError(true)
+          }
         } catch (error) {
-          console.error('Error micrófono:', error)
+          console.error('[Mic] Error transcripción:', error)
+          setRecordError(true)
         } finally {
           setIsTranscribing(false)
         }
       }
 
-      mediaRecorder.start()
+      // timeslice=1000ms: ensures ondataavailable fires every second on WebKit/iOS
+      mediaRecorder.start(1000)
+      console.log('[Mic] Grabación iniciada con timeslice 1000ms')
       setIsRecording(true)
       setRecordSeconds(0)
       recordTimerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000)
     } catch (error) {
-      console.error('Error micrófono:', error)
+      console.error('[Mic] Error acceso micrófono:', error)
       setIsRecording(false)
+      setRecordError(true)
     }
   }
 
@@ -1046,8 +1075,8 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
                   className={isRecording ? 'mic-recording' : ''}
                   style={{
                     width: 32, height: 32, borderRadius: '50%',
-                    background: isRecording ? 'rgba(239,68,68,0.15)' : '#111',
-                    border: `0.5px solid ${isRecording ? '#EF4444' : '#1e1e1e'}`,
+                    background: isRecording ? 'rgba(239,68,68,0.15)' : recordError ? 'rgba(249,115,22,0.12)' : '#111',
+                    border: `0.5px solid ${isRecording ? '#EF4444' : recordError ? '#f97316' : '#1e1e1e'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: isTranscribing ? 'default' : 'pointer',
                     transition: 'background 0.2s, border 0.2s',
@@ -1062,7 +1091,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
                       <span style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: '#EF4444', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{recordSeconds}s</span>
                     </>
                   ) : (
-                    <Mic size={14} color="rgba(255,255,255,0.5)" />
+                    <Mic size={14} color={recordError ? '#f97316' : 'rgba(255,255,255,0.5)'} />
                   )}
                 </motion.button>
                 <motion.button
