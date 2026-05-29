@@ -65,13 +65,6 @@ function getSliderColor(value: number): string {
   return stops[stops.length-1][1]
 }
 
-function getScoreLabel(score: number): string {
-  if (score <= 2) return 'Muy mal día'
-  if (score <= 4) return 'Día difícil'
-  if (score <= 6) return 'Día normal'
-  if (score <= 8) return 'Buen día'
-  return 'Día excepcional'
-}
 
 function formatEntryDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -403,7 +396,6 @@ export default function JournalScreen() {
 
   // ── Derived ────────────────────────────────────────────
   const showForm = !todayEntry || editMode
-  const color    = getScoreColor(score)
 
   // ── Render ─────────────────────────────────────────────
   return (

@@ -860,9 +860,6 @@ export default function BodyScreen() {
   const [editingEntry, setEditingEntry] = useState<ProgressEntry | undefined>(undefined)
   const [detailEntry, setDetailEntry] = useState<ProgressEntry | null>(null)
   const [showAllMeals, setShowAllMeals] = useState(false)
-  const [editingGoal, setEditingGoal] = useState(false)
-  const [goalInput, setGoalInput] = useState('')
-  const goalInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     supabase
@@ -994,23 +991,6 @@ export default function BodyScreen() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   )
 
-  const saveGoal = () => {
-    const val = parseInt(goalInput, 10)
-    if (!isNaN(val) && val > 0) {
-      setGoalCalories(val)
-      supabase
-        .from('user_settings')
-        .upsert({ key: 'goal_calories', value: String(val) }, { onConflict: 'key' })
-        .then(() => {})
-    }
-    setEditingGoal(false)
-  }
-
-  const startEditGoal = () => {
-    setGoalInput(String(goalCalories))
-    setEditingGoal(true)
-    setTimeout(() => goalInputRef.current?.select(), 30)
-  }
 
   const dayCircleColor = (day: WeekDay) => {
     if (day.calories === 0) return '#1e1e1e'
@@ -1103,7 +1083,6 @@ export default function BodyScreen() {
         {/* ── 2. Calorías — card horizontal ─────────────── */}
         <div style={{ padding: '12px 20px 24px' }}>
           {(() => {
-            const overGoal = !loading && totals.calories >= goalCalories
             const pct      = loading ? 0 : Math.min(totals.calories / goalCalories, 1)
             const offset   = CAL_CIRCLE_C * (1 - pct)
             const label    = loading ? '—' : `${Math.round(pct * 100)}%`

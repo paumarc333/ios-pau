@@ -102,15 +102,6 @@ function mockQuote(symbol: string, displayName?: string): Quote {
   }
 }
 
-function mockNews(): NewsItem[] {
-  return [
-    { id: '1', headline: 'Fed signals potential rate cuts amid cooling inflation data', summary: 'Federal Reserve officials have indicated a more dovish stance as inflation metrics approach target levels.', source: 'Mundo',    datetime: Date.now() / 1000 - 3600,  url: '#', category: 'Mundo'    },
-    { id: '2', headline: 'Tech stocks rally as AI optimism continues into Q2',         summary: 'Technology shares led broad market gains driven by continued enthusiasm around artificial intelligence infrastructure spending.', source: 'IA & Tech', datetime: Date.now() / 1000 - 7200,  url: '#', category: 'IA & Tech' },
-    { id: '3', headline: 'European markets close mixed amid geopolitical tensions',     summary: 'Equities in Frankfurt and Paris ended the session with diverging results as investors assessed ongoing regional risks.', source: 'Mundo',    datetime: Date.now() / 1000 - 10800, url: '#', category: 'Mundo'    },
-    { id: '4', headline: 'Real Madrid avanza a semifinales de la Champions League',     summary: 'El conjunto merengue venció por 2-0 al Bayern de Múnich en el Bernabéu y aseguró su pase a la siguiente ronda.', source: 'Fútbol',   datetime: Date.now() / 1000 - 14400, url: '#', category: 'Fútbol'   },
-    { id: '5', headline: 'Nvidia reports record quarterly revenue on AI chip demand',   summary: 'The chipmaker posted its highest ever quarterly revenue, beating analyst expectations on strong data center orders.', source: 'IA & Tech', datetime: Date.now() / 1000 - 18000, url: '#', category: 'IA & Tech' },
-  ]
-}
 
 // ─── Finnhub API ──────────────────────────────────────────────────────────────
 
@@ -673,8 +664,6 @@ export default function MarketsScreen() {
   const [newsLastFetched,  setNewsLastFetched]  = useState<Date | null>(null)
   const [showAdd,          setShowAdd]          = useState(false)
   const [refreshing,       setRefreshing]       = useState(false)
-  const [atlasText,           setAtlasText]           = useState<string | null>(null)
-  const [atlasLoading,        setAtlasLoading]        = useState(false)
   const [deepResearch,        setDeepResearch]        = useState<string | null>(null)
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   const [deepResearchFetched, setDeepResearchFetched] = useState<Date | null>(null)
@@ -776,18 +765,6 @@ export default function MarketsScreen() {
     setWatchlist(prev => prev.filter(q => q.symbol !== sym))
   }
 
-  const analyze = async () => {
-    if (atlasLoading || !ANTHROPIC_KEY) return
-    setAtlasLoading(true)
-    setAtlasText(null)
-    try {
-      setAtlasText(await atlasAnalysis(indices, watchlist, news.map(n => n.headline)))
-    } catch {
-      setAtlasText('Error al conectar con Atlas.')
-    } finally {
-      setAtlasLoading(false)
-    }
-  }
 
   const runDeepResearch = async () => {
     if (deepResearchLoading || !ANTHROPIC_KEY) return
