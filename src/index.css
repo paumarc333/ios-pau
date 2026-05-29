@@ -21,10 +21,12 @@ body {
   justify-content: center;
   align-items: center;
   background: #080810;
+  overflow-x: hidden;
 }
 
 .app {
   width: 390px;
+  max-width: 100%;
   height: 100dvh;
   background: #080810;
   border-radius: 50px;
@@ -32,6 +34,7 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow-x: hidden;
 }
 
 @keyframes newsCardBorderSpin {
