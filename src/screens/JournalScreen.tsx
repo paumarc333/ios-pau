@@ -349,7 +349,19 @@ export default function JournalScreen() {
       setEditMode(false)
       await loadData()
     } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : 'Error al guardar')
+      const err = e as Record<string, unknown>
+      console.error('[Journal] Save error:', JSON.stringify(e, null, 2))
+      const parts = [
+        err.message  != null ? `message: ${err.message}`   : null,
+        err.code     != null ? `code: ${err.code}`         : null,
+        err.details  != null ? `details: ${err.details}`   : null,
+        err.hint     != null ? `hint: ${err.hint}`         : null,
+      ].filter(Boolean)
+      setSaveError(
+        parts.length > 0
+          ? parts.join(' | ')
+          : (e instanceof Error ? e.message : `Error desconocido: ${JSON.stringify(e)}`)
+      )
     } finally {
       setSaving(false)
     }
@@ -507,7 +519,12 @@ export default function JournalScreen() {
                 </motion.button>
 
                 {saveError && (
-                  <div style={{ fontSize: 11, color: '#EF4444', textAlign: 'center', marginTop: 8 }}>
+                  <div style={{
+                    marginTop: 12, padding: '10px 14px', borderRadius: 10,
+                    background: 'rgba(239,68,68,0.1)', border: '0.5px solid rgba(239,68,68,0.4)',
+                    fontSize: 12, color: '#EF4444', lineHeight: 1.6,
+                    wordBreak: 'break-all',
+                  }}>
                     {saveError}
                   </div>
                 )}
