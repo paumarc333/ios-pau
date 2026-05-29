@@ -225,6 +225,7 @@ export default function ChatScreen({ isActive }: { isActive: boolean }) {
 
   const bottomRef        = useRef<HTMLDivElement>(null)
   const fileInputRef     = useRef<HTMLInputElement>(null)
+  const textareaRef      = useRef<HTMLTextAreaElement>(null)
   const scrollRef        = useRef<HTMLDivElement>(null)
   const oldestCreatedAt  = useRef<string | null>(null)
   const autoScroll       = useRef(true)
@@ -444,6 +445,18 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
     initialize()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-resize textarea ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const maxH = window.innerHeight * 0.4
+    const newH = Math.min(el.scrollHeight, maxH)
+    el.style.height = newH + 'px'
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+  }, [input])
 
   // ── Auto-scroll (only when new messages arrive beyond initial load) ──────────
 
@@ -1067,15 +1080,19 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
                 )}
               </AnimatePresence>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 14px', background: 'transparent' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px 14px', background: 'transparent' }}>
                 <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
-                  <input
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '11px 16px', display: 'flex', alignItems: 'flex-end', gap: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+                  <textarea
+                    ref={textareaRef}
                     value={input}
+                    rows={1}
                     onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && send()}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+                    }}
                     placeholder="Ask anything..."
-                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#888', fontWeight: 300, width: '100%', fontFamily: 'Inter, sans-serif' }}
+                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#888', fontWeight: 300, width: '100%', fontFamily: 'Inter, sans-serif', resize: 'none', overflowY: 'hidden', lineHeight: '1.5', padding: 0, display: 'block' }}
                   />
                 </div>
                 <motion.button
