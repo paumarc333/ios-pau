@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { TrendingUp, TrendingDown, RefreshCw, Plus, X, Search, Newspaper } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, Plus, X, Search } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -452,9 +452,7 @@ function WatchlistRow({ quote, onRemove }: { quote: Quote; onRemove: () => void 
   )
 }
 
-// ─── News card ────────────────────────────────────────────────────────────────
-
-const NEWS_ACCENTS = ['#8B5CF6', '#06B6D4', '#EC4899', '#10B981', '#F59E0B']
+// ─── News components ─────────────────────────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Fútbol':    '#10B981',
@@ -462,74 +460,77 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Mundo':     '#06B6D4',
 }
 
-function NewsCard({ item, index }: { item: NewsItem; index: number }) {
-  const [expanded, setExpanded] = useState(false)
+function CategoryPill({ category }: { category: string }) {
+  const color = CATEGORY_COLORS[category] ?? 'rgba(255,255,255,0.3)'
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 9px', borderRadius: 20,
+      background: `${color}18`, border: `0.5px solid ${color}40`,
+      fontSize: 10, color, letterSpacing: '1px', fontWeight: 500, lineHeight: 1.4,
+    }}>
+      {category.toUpperCase()}
+    </span>
+  )
+}
 
-  const h          = Math.floor((Date.now() / 1000 - item.datetime) / 3600)
-  const timeStr    = h < 1 ? '<1h' : `${h}h`
-  const rawSummary = item.summary && item.summary !== item.headline ? item.summary : ''
-  const accent     = NEWS_ACCENTS[index % NEWS_ACCENTS.length]
-  const catColor   = CATEGORY_COLORS[item.category] ?? 'rgba(255,255,255,0.35)'
-
+function FeaturedNewsCard({ item }: { item: NewsItem }) {
+  const h       = Math.floor((Date.now() / 1000 - item.datetime) / 3600)
+  const timeStr = h < 1 ? '<1h' : `${h}h`
+  const handleClick = () => {
+    if (item.url && item.url !== '#') window.open(item.url, '_blank', 'noopener,noreferrer')
+  }
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-      onClick={() => rawSummary && setExpanded(e => !e)}
+      onClick={handleClick}
       style={{
-        background: '#0a0a10',
-        borderRadius: 14,
-        padding: '14px 16px',
-        marginBottom: 8,
-        cursor: rawSummary ? 'pointer' : 'default',
-        position: 'relative',
-        overflow: 'hidden',
+        padding: '4px 0 16px',
+        borderBottom: '0.5px solid rgba(255,255,255,0.06)',
+        cursor: item.url && item.url !== '#' ? 'pointer' : 'default',
       }}
     >
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.4), rgba(6,182,212,0.3), transparent)' }} />
-        {/* Category + time */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-          <span style={{ fontSize: 10, color: catColor, letterSpacing: '1px', fontWeight: 600 }}>
-            {item.category.toUpperCase()}
-          </span>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{timeStr}</span>
-        </div>
+      <CategoryPill category={item.category} />
+      <div style={{
+        fontSize: 17, color: '#fff', fontWeight: 600, lineHeight: 1.4,
+        marginTop: 10, marginBottom: 8,
+        display: '-webkit-box', WebkitLineClamp: 3,
+        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
+        {item.headline}
+      </div>
+      <span style={{ fontSize: 11, color: '#444' }}>{timeStr}</span>
+    </motion.div>
+  )
+}
 
-        {/* Headline — 2-line clamp when collapsed */}
-        <div style={{
-          fontSize: 14, color: '#fff', fontWeight: 600, lineHeight: 1.4,
-          display: '-webkit-box',
-          WebkitLineClamp: expanded ? 'unset' : 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: expanded ? 'visible' : 'hidden',
-        }}>
-          {item.headline}
-        </div>
-
-        {/* Expandable summary */}
-        <AnimatePresence>
-          {expanded && rawSummary && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              style={{ overflow: 'hidden' }}
-            >
-              <div style={{ paddingTop: 10, fontSize: 12, color: '#555', lineHeight: 1.6 }}>
-                {rawSummary}
-              </div>
-              {item.url && item.url !== '#' && (
-                <a
-                  href={item.url} target="_blank" rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  style={{ display: 'inline-block', marginTop: 10, fontSize: 11, color: accent, textDecoration: 'none', opacity: 0.85 }}
-                >
-                  Ver artículo →
-                </a>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+function CompactNewsRow({ item, isLast }: { item: NewsItem; isLast: boolean }) {
+  const h       = Math.floor((Date.now() / 1000 - item.datetime) / 3600)
+  const timeStr = h < 1 ? '<1h' : `${h}h`
+  const handleClick = () => {
+    if (item.url && item.url !== '#') window.open(item.url, '_blank', 'noopener,noreferrer')
+  }
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+      onClick={handleClick}
+      style={{
+        padding: '12px 0',
+        borderBottom: isLast ? 'none' : '0.5px solid rgba(255,255,255,0.05)',
+        cursor: item.url && item.url !== '#' ? 'pointer' : 'default',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <CategoryPill category={item.category} />
+        <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>{timeStr}</span>
+      </div>
+      <div style={{
+        fontSize: 13, color: '#e0e0e0', fontWeight: 500, lineHeight: 1.45,
+        display: '-webkit-box', WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
+        {item.headline}
+      </div>
     </motion.div>
   )
 }
@@ -995,67 +996,75 @@ export default function MarketsScreen() {
 
       </div>
 
-      {/* ── Atlas + News section ── */}
-      <div style={{ padding: '22px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* ── News section ── */}
+      <div style={{ padding: '22px 16px 90px' }}>
         <div style={{
-          width: '100%',
-          borderRadius: 16,
-          boxShadow: '0 0 0 1px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.08), 0 0 40px rgba(6,182,212,0.05)',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          position: 'relative',
+          background: 'rgba(255,255,255,0.03)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          border: '0.5px solid rgba(255,255,255,0.08)',
+          borderRadius: 16, padding: 16,
+          boxShadow: '0 0 0 0.5px rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
         }}>
+          {/* Neon top border */}
+          <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 1, borderRadius: 1, background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.5), rgba(6,182,212,0.3), transparent)', pointerEvents: 'none' }} />
 
-        {/* News header */}
-        <div style={{ fontSize: 11, color: '#444', letterSpacing: '2px', marginTop: 22, marginBottom: 10, width: '100%' }}>NOTICIAS</div>
-
-        {/* Refresh news button */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 12 }}>
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={refreshNews}
-            disabled={newsRefreshing}
-            style={{ background: 'none', border: 'none', cursor: newsRefreshing ? 'default' : 'pointer', padding: 0 }}
-          >
-            <div style={{ position: 'relative', width: 44, height: 44 }}>
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: newsRefreshing ? 1 : 3, ease: 'linear' }}
-                style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)' }}
-              />
-              <div style={{ position: 'absolute', inset: 2, borderRadius: '50%', background: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <Newspaper size={18} color="#fff" />
-              </div>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 15, color: '#ccc', fontWeight: 300 }}>Noticias</span>
+              {newsLastFetched && (
+                <span style={{ fontSize: 11, color: '#333' }}>{timeAgo(newsLastFetched)}</span>
+              )}
             </div>
-          </motion.button>
-          {newsLastFetched && (
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 6, textAlign: 'center' }}>
-              {timeAgo(newsLastFetched)}
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={refreshNews}
+              disabled={newsRefreshing}
+              style={{ background: 'none', border: 'none', cursor: newsRefreshing ? 'default' : 'pointer', padding: 4, display: 'flex' }}
+            >
+              <motion.div
+                animate={newsRefreshing ? { rotate: 360 } : { rotate: 0 }}
+                transition={{ duration: 0.9, repeat: newsRefreshing ? Infinity : 0, ease: 'linear' }}
+              >
+                <RefreshCw size={14} color={newsRefreshing ? '#8B5CF6' : '#333'} />
+              </motion.div>
+            </motion.button>
+          </div>
+
+          {/* Loading skeleton */}
+          {loadingNews && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <Skeleton h={18} radius={10} />
+                <div style={{ marginTop: 10 }}><Skeleton h={54} radius={6} /></div>
+                <div style={{ marginTop: 8 }}><Skeleton h={10} radius={6} /></div>
+              </div>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i}>
+                  <Skeleton h={18} radius={10} />
+                  <div style={{ marginTop: 8 }}><Skeleton h={32} radius={6} /></div>
+                </div>
+              ))}
             </div>
           )}
-        </div>
 
-        {/* News list */}
-        <div style={{ width: '100%' }}>
-          {loadingNews
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ padding: '14px', background: '#0f0f0f', border: '0.5px solid #161616', borderRadius: 16, marginBottom: 7 }}>
-                  <Skeleton h={9} />
-                  <div style={{ marginTop: 8 }}><Skeleton h={14} /></div>
-                  <div style={{ marginTop: 6 }}><Skeleton h={9} /></div>
-                </div>
-              ))
-            : news.length > 0
-              ? news.map((item, i) => <NewsCard key={item.id} item={item} index={i} />)
-              : (
-                  <div style={{ padding: '28px 0', textAlign: 'center', color: '#2a2a2a', fontSize: 12 }}>
-                    Pulsa el botón para cargar noticias
-                  </div>
-                )
-          }
-        </div>
+          {/* Featured + list */}
+          {!loadingNews && news.length > 0 && (
+            <>
+              <FeaturedNewsCard item={news[0]} />
+              {news.slice(1).map((item, i) => (
+                <CompactNewsRow key={item.id} item={item} isLast={i === news.length - 2} />
+              ))}
+            </>
+          )}
+
+          {/* Empty state */}
+          {!loadingNews && news.length === 0 && (
+            <div style={{ padding: '28px 0', textAlign: 'center', color: '#2a2a2a', fontSize: 12, letterSpacing: '0.5px' }}>
+              Pulsa ↻ para cargar noticias
+            </div>
+          )}
         </div>
       </div>
 
