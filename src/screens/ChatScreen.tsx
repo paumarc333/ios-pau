@@ -152,8 +152,8 @@ const LINE_STYLES = `
   .task-pill-orange { background: rgba(245,158,11,0.12); border: 0.5px solid rgba(245,158,11,0.28); color: #F59E0B; }
   .task-pill-green  { background: rgba(16,185,129,0.12); border: 0.5px solid rgba(16,185,129,0.28); color: #10B981; }
   @keyframes mic-pulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(139,92,246,0.5); }
-    50%       { opacity: 0.8; box-shadow: 0 0 0 8px rgba(139,92,246,0); }
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+    50%       { opacity: 0.7; box-shadow: 0 0 0 6px rgba(239,68,68,0); }
   }
   .mic-recording { animation: mic-pulse 1s ease-in-out infinite; }
 `
@@ -1082,9 +1082,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px 14px', background: 'transparent' }}>
                 <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-
-                {/* Text pill with camera inside */}
-                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '11px 8px 11px 16px', display: 'flex', alignItems: 'flex-end', gap: 6, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '11px 16px', display: 'flex', alignItems: 'flex-end', gap: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
                   <textarea
                     ref={textareaRef}
                     value={input}
@@ -1094,71 +1092,50 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
                       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
                     }}
                     placeholder="Ask anything..."
-                    style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#888', fontWeight: 300, fontFamily: 'Inter, sans-serif', resize: 'none', overflowY: 'hidden', lineHeight: '1.5', padding: 0, display: 'block' }}
+                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#888', fontWeight: 300, width: '100%', fontFamily: 'Inter, sans-serif', resize: 'none', overflowY: 'hidden', lineHeight: '1.5', padding: 0, display: 'block' }}
                   />
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ width: 28, height: 28, borderRadius: '50%', background: pendingImage ? 'rgba(139,92,246,0.15)' : 'transparent', border: `0.5px solid ${pendingImage ? '#8B5CF6' : 'transparent'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginBottom: 1, transition: 'background 0.2s, border 0.2s' }}
-                  >
-                    <Camera size={15} color={pendingImage ? '#8B5CF6' : 'rgba(255,255,255,0.28)'} />
-                  </motion.button>
                 </div>
-
-                {/* Single right button: Mic (empty) or Send (has content) */}
-                <AnimatePresence mode="wait" initial={false}>
-                  {!input.trim() && !pendingImage ? (
-                    <motion.button
-                      key="mic"
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={toggleRecording}
-                      disabled={isTranscribing}
-                      className={isRecording ? 'mic-recording' : ''}
-                      style={{
-                        width: 40, height: 40, borderRadius: '50%',
-                        background: isRecording
-                          ? 'rgba(139,92,246,0.18)'
-                          : recordError
-                          ? 'rgba(249,115,22,0.12)'
-                          : 'rgba(139,92,246,0.1)',
-                        border: `0.5px solid ${isRecording ? '#8B5CF6' : recordError ? '#f97316' : 'rgba(139,92,246,0.35)'}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: isTranscribing ? 'default' : 'pointer',
-                        transition: 'background 0.2s, border 0.2s',
-                        position: 'relative', flexShrink: 0,
-                      }}
-                    >
-                      {isTranscribing ? (
-                        <span style={{ fontSize: 8, color: '#888', fontFamily: 'Inter, sans-serif' }}>···</span>
-                      ) : isRecording ? (
-                        <>
-                          <Square size={11} color="#8B5CF6" fill="#8B5CF6" />
-                          <span style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: '#8B5CF6', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{recordSeconds}s</span>
-                        </>
-                      ) : (
-                        <Mic size={16} color={recordError ? '#f97316' : '#8B5CF6'} />
-                      )}
-                    </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ width: 32, height: 32, borderRadius: '50%', background: pendingImage ? '#1a1a2e' : '#111', border: `0.5px solid ${pendingImage ? '#8B5CF6' : '#1e1e1e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s, border 0.2s' }}
+                >
+                  <Camera size={14} color={pendingImage ? '#8B5CF6' : '#333'} />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={toggleRecording}
+                  disabled={isTranscribing}
+                  className={isRecording ? 'mic-recording' : ''}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: isRecording ? 'rgba(239,68,68,0.15)' : recordError ? 'rgba(249,115,22,0.12)' : '#111',
+                    border: `0.5px solid ${isRecording ? '#EF4444' : recordError ? '#f97316' : '#1e1e1e'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: isTranscribing ? 'default' : 'pointer',
+                    transition: 'background 0.2s, border 0.2s',
+                    position: 'relative',
+                  }}
+                >
+                  {isTranscribing ? (
+                    <span style={{ fontSize: 8, color: '#888', fontFamily: 'Inter, sans-serif', letterSpacing: 0 }}>···</span>
+                  ) : isRecording ? (
+                    <>
+                      <Square size={10} color="#EF4444" fill="#EF4444" />
+                      <span style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: '#EF4444', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{recordSeconds}s</span>
+                    </>
                   ) : (
-                    <motion.button
-                      key="send"
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={send}
-                      disabled={loading}
-                      style={{ width: 40, height: 40, borderRadius: '50%', background: loading ? '#333' : '#f0f0f0', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: loading ? 'default' : 'pointer', transition: 'background 0.2s', flexShrink: 0 }}
-                    >
-                      <ArrowUp size={16} color={loading ? '#555' : '#0a0a0a'} />
-                    </motion.button>
+                    <Mic size={14} color={recordError ? '#f97316' : 'rgba(255,255,255,0.5)'} />
                   )}
-                </AnimatePresence>
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={send}
+                  disabled={loading}
+                  style={{ width: 32, height: 32, borderRadius: '50%', background: loading ? '#333' : '#f0f0f0', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: loading ? 'default' : 'pointer', transition: 'background 0.2s' }}
+                >
+                  <ArrowUp size={14} color={loading ? '#555' : '#0a0a0a'} />
+                </motion.button>
               </div>
             </div>
           </motion.div>
