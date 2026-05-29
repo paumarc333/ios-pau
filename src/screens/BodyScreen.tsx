@@ -294,7 +294,7 @@ function ProgressModal({
             <div style={{ fontSize: 9, color: '#333', letterSpacing: '2px', marginBottom: 10 }}>PRs</div>
             {prs.map((pr, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <Dumbbell size={16} className="pr-icon-grad" style={{ flexShrink: 0 }} />
+                <Dumbbell size={16} color="#555" style={{ flexShrink: 0 }} />
                 <input type="text" value={pr.name}
                   onChange={e => setPrs(prev => prev.map((p, j) => j === i ? { ...p, name: e.target.value } : p))}
                   style={{ ...inp, flex: 1, padding: '7px 10px' }} />
@@ -476,7 +476,7 @@ function ProgressDetailModal({ entry, onClose }: { entry: ProgressEntry; onClose
                     padding: '12px 14px',
                     borderBottom: i < activePRs.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none',
                   }}>
-                    <Dumbbell size={15} className="pr-icon-grad" style={{ flexShrink: 0 }} />
+                    <Dumbbell size={15} color="#555" style={{ flexShrink: 0 }} />
                     <span style={{ fontSize: 13, color: '#666', flex: 1 }}>{pr.name}</span>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                       {pr.weight !== undefined && (
@@ -654,7 +654,7 @@ function ProgressEntryCard({
                 padding: '8px 10px',
                 borderBottom: i < activePRs.length - 1 ? '0.5px solid #161616' : 'none',
               }}>
-                <Dumbbell size={12} className="pr-icon-grad" style={{ flexShrink: 0 }} />
+                <Dumbbell size={12} color="#555" style={{ flexShrink: 0 }} />
                 <span style={{ fontSize: 11, color: '#555', flex: 1 }}>{pr.name}</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                   {pr.weight !== undefined && (
@@ -793,13 +793,6 @@ function MacroRing({
 }
 
 const BODY_STYLES = `
-  .pr-icon-grad path,
-  .pr-icon-grad line,
-  .pr-icon-grad circle,
-  .pr-icon-grad rect,
-  .pr-icon-grad polyline {
-    stroke: url(#prDumbbellGrad) !important;
-  }
   .progress-add-btn {
     background: none;
     border: none;
@@ -1000,17 +993,6 @@ export default function BodyScreen() {
   return (
     <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
       <style>{BODY_STYLES}</style>
-      <svg width="0" height="0" style={{ position: 'absolute' }}>
-        <defs>
-          <linearGradient id="prDumbbellGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0" spreadMethod="repeat">
-            <stop offset="0%" stopColor="#8B5CF6" />
-            <stop offset="100%" stopColor="#06B6D4" />
-            <animate attributeName="x1" values="0;24;0" dur="3s" repeatCount="indefinite" />
-            <animate attributeName="x2" values="24;48;24" dur="3s" repeatCount="indefinite" />
-          </linearGradient>
-        </defs>
-      </svg>
-
       {/* ── Depth orbs — Linear style ──────────────────── */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
         <div style={{
