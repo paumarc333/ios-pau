@@ -163,12 +163,12 @@ async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
     },
     body: JSON.stringify({
       model:      'claude-sonnet-4-5',
-      max_tokens: 2048,
+      max_tokens: 3000,
       system:     'Eres Atlas, asistente de noticias. Busca noticias reales y actuales. Devuelve SOLO JSON válido, sin texto adicional, sin markdown.',
       tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
       messages:   [{
         role:    'user',
-        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "resumen en español máximo 200 caracteres",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País",\n    "published_at": "fecha y hora de publicación en ISO 8601, o cadena vacía si no disponible"\n  }\n]\nSolo el array JSON, nada más.',
+        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "2-4 frases en español explicando el contexto y lo más relevante de la noticia",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País",\n    "published_at": "fecha y hora de publicación en ISO 8601, o cadena vacía si no disponible"\n  }\n]\nSolo el array JSON, nada más.',
       }],
     }),
   })
@@ -481,23 +481,22 @@ function CategoryPill({ category }: { category: string }) {
   )
 }
 
-function NewsRow({ item, index, isLast }: { item: NewsItem; index: number; isLast: boolean }) {
+function NewsRow({ item, index, isLast, onSelect }: {
+  item: NewsItem; index: number; isLast: boolean; onSelect: (item: NewsItem) => void
+}) {
   const age  = timeAgo(new Date(item.datetime * 1000))
   const meta = [item.source || null, age].filter(Boolean).join(' · ')
-  const handleClick = () => {
-    if (item.url && item.url !== '#') window.open(item.url, '_blank', 'noopener,noreferrer')
-  }
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.055, duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       whileTap={{ scale: 0.98 }}
-      onClick={handleClick}
+      onClick={() => onSelect(item)}
       style={{
         padding: '12px 0',
         borderBottom: isLast ? 'none' : '0.5px solid rgba(255,255,255,0.05)',
-        cursor: item.url && item.url !== '#' ? 'pointer' : 'default',
+        cursor: 'pointer',
       }}
     >
       <div style={{ marginBottom: 7 }}>
@@ -515,6 +514,80 @@ function NewsRow({ item, index, isLast }: { item: NewsItem; index: number; isLas
         <div style={{ fontSize: 11, color: '#3a3a3a', letterSpacing: '0.2px' }}>{meta}</div>
       )}
     </motion.div>
+  )
+}
+
+function NewsDetailSheet({ item, onClose }: { item: NewsItem; onClose: () => void }) {
+  const age  = timeAgo(new Date(item.datetime * 1000))
+  const meta = [item.source || null, age].filter(Boolean).join(' · ')
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100 }}
+      />
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          background: '#0d0d0d', borderRadius: '24px 24px 0 0',
+          maxHeight: '85vh', overflowY: 'auto', zIndex: 101,
+          border: '0.5px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 1, borderRadius: 1, background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.5), rgba(6,182,212,0.3), transparent)', pointerEvents: 'none' }} />
+
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 0' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#222' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 16px 4px' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex' }}>
+            <X size={18} color="#555" />
+          </button>
+        </div>
+
+        <div style={{ padding: '4px 20px 52px' }}>
+          <CategoryPill category={item.category} />
+
+          <div style={{
+            fontSize: 18, color: '#fff', fontWeight: 600, lineHeight: 1.4,
+            marginTop: 14, marginBottom: 8,
+          }}>
+            {item.headline}
+          </div>
+
+          {meta && (
+            <div style={{ fontSize: 12, color: '#444', marginBottom: 20 }}>{meta}</div>
+          )}
+
+          {item.summary && (
+            <div style={{
+              fontSize: 14, color: '#aaa', lineHeight: 1.75,
+              marginBottom: 28, fontWeight: 300,
+            }}>
+              {item.summary}
+            </div>
+          )}
+
+          {item.url && item.url !== '#' && (
+            <a
+              href={item.url} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: 'block', textAlign: 'center',
+                padding: '13px 20px', borderRadius: 14,
+                background: 'rgba(139,92,246,0.1)', border: '0.5px solid rgba(139,92,246,0.3)',
+                color: '#8B5CF6', fontSize: 14, textDecoration: 'none',
+                fontFamily: 'Inter, sans-serif', fontWeight: 500,
+              }}
+            >
+              Leer en la fuente →
+            </a>
+          )}
+        </div>
+      </motion.div>
+    </>
   )
 }
 
@@ -653,6 +726,7 @@ export default function MarketsScreen() {
   const [deepResearchFetched, setDeepResearchFetched] = useState<Date | null>(null)
   const [researchVisible, setResearchVisible] = useState(false)
   const [newsAnimKey,     setNewsAnimKey]     = useState(0)
+  const [selectedNews,    setSelectedNews]    = useState<NewsItem | null>(null)
 
   const newsFetched = useRef(false)
   const newsLoading = useRef(false)
@@ -1034,7 +1108,7 @@ export default function MarketsScreen() {
           {!loadingNews && news.length > 0 && (
             <div key={newsAnimKey}>
               {news.map((item, i) => (
-                <NewsRow key={item.id} item={item} index={i} isLast={i === news.length - 1} />
+                <NewsRow key={item.id} item={item} index={i} isLast={i === news.length - 1} onSelect={setSelectedNews} />
               ))}
             </div>
           )}
@@ -1053,6 +1127,10 @@ export default function MarketsScreen() {
       {/* Add symbol sheet — outside scroll so it overlays everything */}
       <AnimatePresence>
         {showAdd && <AddSymbolSheet existing={symbols} onAdd={addSymbol} onClose={() => setShowAdd(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedNews && <NewsDetailSheet item={selectedNews} onClose={() => setSelectedNews(null)} />}
       </AnimatePresence>
 
     </div>
