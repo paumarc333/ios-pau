@@ -163,12 +163,12 @@ async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
     },
     body: JSON.stringify({
       model:      'claude-sonnet-4-5',
-      max_tokens: 3000,
+      max_tokens: 4500,
       system:     'Eres Atlas, asistente de noticias. Busca noticias reales y actuales. Devuelve SOLO JSON válido, sin texto adicional, sin markdown.',
       tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
       messages:   [{
         role:    'user',
-        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "2-4 frases en español explicando el contexto y lo más relevante de la noticia",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País",\n    "published_at": "fecha y hora de publicación en ISO 8601, o cadena vacía si no disponible"\n  }\n]\nSolo el array JSON, nada más.',
+        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "2-3 párrafos cortos (4-6 frases en total) en español: qué ha pasado, contexto y antecedentes, y por qué importa. Separa los párrafos con \\n\\n.",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País",\n    "published_at": "fecha y hora de publicación en ISO 8601, o cadena vacía si no disponible"\n  }\n]\nSolo el array JSON, nada más.',
       }],
     }),
   })
@@ -562,14 +562,22 @@ function NewsDetailSheet({ item, onClose }: { item: NewsItem; onClose: () => voi
             <div style={{ fontSize: 12, color: '#444', marginBottom: 20 }}>{meta}</div>
           )}
 
-          {item.summary && (
-            <div style={{
-              fontSize: 14, color: '#aaa', lineHeight: 1.75,
-              marginBottom: 28, fontWeight: 300,
-            }}>
-              {item.summary}
-            </div>
-          )}
+          {item.summary && (() => {
+            const paras = item.summary.split('\n\n').map(p => p.trim()).filter(Boolean)
+            return (
+              <div style={{ marginBottom: 28 }}>
+                {paras.map((para, i) => (
+                  <p key={i} style={{
+                    fontSize: 14, color: '#aaa', lineHeight: 1.8,
+                    fontWeight: 300, margin: 0,
+                    marginBottom: i < paras.length - 1 ? 14 : 0,
+                  }}>
+                    {para}
+                  </p>
+                ))}
+              </div>
+            )
+          })()}
 
           {item.url && item.url !== '#' && (
             <a
