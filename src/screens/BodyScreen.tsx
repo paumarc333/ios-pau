@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Pencil, Check, Plus, Trash2, X } from 'lucide-react'
+import { Pencil, Check, Plus, Trash2, X, Dumbbell } from 'lucide-react'
 import { supabase, type Meal } from '../lib/supabase'
 
 const RING_R = 28
@@ -34,83 +34,6 @@ function getMondayOfWeek(ref: Date) {
   return d
 }
 
-// ── Iconos SVG minimalistas ──────────────────────────────
-function MeasureIcon({ type }: { type: string }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#555" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      {type === 'bicep' && <>
-        <path d="M3,15 C2,12 1,9 3,6 C4,4 6,3 8,4"/>
-        <path d="M8,4 C10,3 11,5 11,8 C11,10 10,11 9,12"/>
-        <path d="M9,12 L15,12 L15,15 L3,15"/>
-      </>}
-      {type === 'chest' && <>
-        <path d="M3,6 C3,4 5,2 9,2 C13,2 15,4 15,6 L15,15 L3,15 Z"/>
-        <line x1="9" y1="2" x2="9" y2="8"/>
-        <path d="M3,6 C5,9 7,9 9,8 C11,9 13,9 15,6"/>
-      </>}
-      {type === 'waist' && <>
-        <line x1="4" y1="2" x2="14" y2="2"/>
-        <path d="M4,2 C4,5 7,7 7,9 C7,11 4,13 4,16"/>
-        <path d="M14,2 C14,5 11,7 11,9 C11,11 14,13 14,16"/>
-        <line x1="4" y1="16" x2="14" y2="16"/>
-      </>}
-      {type === 'hip' && <>
-        <path d="M7,2 L11,2 C12,4 14,6 15,9 C16,12 15,15 9,16 C3,15 2,12 3,9 C4,6 6,4 7,2 Z"/>
-      </>}
-      {type === 'thigh' && <>
-        <path d="M3,3 C2,3 2,7 2,10 C2,14 3,16 5,16 L7,16 C9,16 9,13 9,10 C9,6 8,3 7,3 Z"/>
-        <path d="M11,3 C10,3 9,6 9,10 C9,13 9,16 11,16 L13,16 C15,16 16,14 16,10 C16,7 16,3 15,3 Z"/>
-      </>}
-      {type === 'calf' && <>
-        <path d="M7,2 L11,2 L14,7 C16,10 15,13 13,14 L11,17 L7,17 L5,14 C3,13 2,10 4,7 Z"/>
-      </>}
-    </svg>
-  )
-}
-
-function ExerciseIcon({ type }: { type: string }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#555" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      {type === 'bench' && <>
-        <line x1="2" y1="5" x2="16" y2="5"/>
-        <line x1="2" y1="3" x2="2" y2="7"/>
-        <line x1="16" y1="3" x2="16" y2="7"/>
-        <line x1="7" y1="5" x2="7" y2="11"/>
-        <line x1="11" y1="5" x2="11" y2="11"/>
-        <line x1="4" y1="12" x2="13" y2="12"/>
-        <circle cx="15" cy="12" r="2"/>
-        <line x1="3" y1="14" x2="14" y2="14"/>
-      </>}
-      {type === 'squat' && <>
-        <circle cx="9" cy="3" r="2"/>
-        <line x1="9" y1="5" x2="9" y2="9"/>
-        <line x1="3" y1="8" x2="15" y2="8"/>
-        <line x1="2" y1="6" x2="2" y2="10"/>
-        <line x1="16" y1="6" x2="16" y2="10"/>
-        <path d="M9,9 L6,13 L4,17"/>
-        <path d="M9,9 L12,13 L14,17"/>
-      </>}
-      {type === 'deadlift' && <>
-        <circle cx="4" cy="5" r="2"/>
-        <line x1="4" y1="7" x2="13" y2="10"/>
-        <line x1="13" y1="10" x2="12" y2="16"/>
-        <line x1="15" y1="10" x2="14" y2="16"/>
-        <line x1="8" y1="8" x2="8" y2="14"/>
-        <line x1="3" y1="14" x2="15" y2="14"/>
-        <line x1="3" y1="12" x2="3" y2="16"/>
-        <line x1="15" y1="12" x2="15" y2="16"/>
-      </>}
-    </svg>
-  )
-}
-
-function prIconType(name: string) {
-  const n = name.toLowerCase()
-  if (n.includes('sentadilla') || n.includes('squat')) return 'squat'
-  if (n.includes('muerto') || n.includes('deadlift')) return 'deadlift'
-  return 'bench'
-}
-
 // ── Modal nueva / editar entrada ──────────────────────────
 const MEASURES = [
   { key: 'bicep',  label: 'Bícep'       },
@@ -120,8 +43,6 @@ const MEASURES = [
   { key: 'thigh',  label: 'Muslo'       },
   { key: 'calf',   label: 'Pantorrilla' },
 ] as const
-
-const PR_ICON_TYPES = ['bench', 'squat', 'deadlift']
 
 function ProgressModal({
   onClose,
@@ -360,7 +281,6 @@ function ProgressModal({
 
             {MEASURES.map(({ key, label }) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 11 }}>
-                <MeasureIcon type={key} />
                 <span style={{ fontSize: 13, color: '#555', flex: 1 }}>{label}</span>
                 <input type="number" placeholder="—" value={measurements[key]}
                   onChange={e => setMeasurements(prev => ({ ...prev, [key]: e.target.value }))}
@@ -374,7 +294,7 @@ function ProgressModal({
             <div style={{ fontSize: 9, color: '#333', letterSpacing: '2px', marginBottom: 10 }}>PRs</div>
             {prs.map((pr, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <ExerciseIcon type={PR_ICON_TYPES[i]} />
+                <Dumbbell size={16} className="pr-icon-grad" style={{ flexShrink: 0 }} />
                 <input type="text" value={pr.name}
                   onChange={e => setPrs(prev => prev.map((p, j) => j === i ? { ...p, name: e.target.value } : p))}
                   style={{ ...inp, flex: 1, padding: '7px 10px' }} />
@@ -502,25 +422,37 @@ function ProgressDetailModal({ entry, onClose }: { entry: ProgressEntry; onClose
         )}
 
         <div style={{ padding: '0 20px 48px' }}>
+
+          {entry.measurements['body_weight'] && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 40, color: '#fff', fontWeight: 200, lineHeight: 1, letterSpacing: '-1px' }}>
+                  {entry.measurements['body_weight']}
+                </span>
+                <span style={{ fontSize: 18, color: '#555', fontWeight: 300 }}>kg</span>
+              </div>
+              <div style={{ fontSize: 10, color: '#333', letterSpacing: '2px', marginTop: 6 }}>PESO CORPORAL</div>
+            </div>
+          )}
+
           {hasMeasurements && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 9, color: '#333', letterSpacing: '2px', marginBottom: 12 }}>MEDIDAS</div>
+              <div style={{ fontSize: 10, color: '#444', letterSpacing: '2px', marginBottom: 10 }}>MEDIDAS</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {MEASURES.map(({ key, label }) => {
                   const val = entry.measurements[key]
                   if (val === undefined) return null
                   return (
                     <div key={key} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 12px', background: '#111',
-                      borderRadius: 12, border: '0.5px solid #1a1a1a',
+                      display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                      padding: '12px 14px',
+                      background: 'rgba(255,255,255,0.04)',
+                      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                      borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.07)',
                     }}>
-                      <MeasureIcon type={key} />
-                      <div>
-                        <div style={{ fontSize: 10, color: '#444' }}>{label}</div>
-                        <div style={{ fontSize: 15, color: '#ccc', fontWeight: 200, lineHeight: 1.2 }}>
-                          {val}<span style={{ fontSize: 10, color: '#444' }}>cm</span>
-                        </div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 6, letterSpacing: '1.5px', textTransform: 'uppercase' }}>{label}</div>
+                      <div style={{ fontSize: 22, color: '#fff', fontWeight: 300, lineHeight: 1 }}>
+                        {val}<span style={{ fontSize: 12, color: '#444', fontWeight: 300, marginLeft: 4 }}> cm</span>
                       </div>
                     </div>
                   )
@@ -531,25 +463,34 @@ function ProgressDetailModal({ entry, onClose }: { entry: ProgressEntry; onClose
 
           {activePRs.length > 0 && (
             <div>
-              <div style={{ fontSize: 9, color: '#333', letterSpacing: '2px', marginBottom: 12 }}>PRs</div>
-              {activePRs.map((pr, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 14px', background: '#111',
-                  borderRadius: 12, border: '0.5px solid #1a1a1a', marginBottom: 8,
-                }}>
-                  <ExerciseIcon type={prIconType(pr.name)} />
-                  <span style={{ fontSize: 13, color: '#555', flex: 1 }}>{pr.name}</span>
-                  {pr.weight !== undefined && (
-                    <span style={{ fontSize: 15, color: '#ccc', fontWeight: 200 }}>
-                      {pr.weight}<span style={{ fontSize: 10, color: '#444' }}>kg</span>
-                    </span>
-                  )}
-                  {pr.reps !== undefined && (
-                    <span style={{ fontSize: 12, color: '#444' }}>× {pr.reps}</span>
-                  )}
-                </div>
-              ))}
+              <div style={{ fontSize: 10, color: '#444', letterSpacing: '2px', marginBottom: 10 }}>RÉCORDS</div>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.07)',
+                overflow: 'hidden',
+              }}>
+                {activePRs.map((pr, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px',
+                    borderBottom: i < activePRs.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none',
+                  }}>
+                    <Dumbbell size={15} className="pr-icon-grad" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#666', flex: 1 }}>{pr.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {pr.weight !== undefined && (
+                        <span style={{ fontSize: 15, color: '#ccc', fontWeight: 300 }}>
+                          {pr.weight} <span style={{ fontSize: 11, color: '#555' }}>kg</span>
+                        </span>
+                      )}
+                      {pr.reps !== undefined && (
+                        <span style={{ fontSize: 12, color: '#444' }}>× {pr.reps}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -669,38 +610,65 @@ function ProgressEntryCard({
       </div>
 
       {entry.measurements['body_weight'] && (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 10 }}>
-          <span style={{ fontSize: 15, color: '#ccc', fontWeight: 200 }}>{entry.measurements['body_weight']}</span>
-          <span style={{ fontSize: 11, color: '#555' }}>kg</span>
-          <span style={{ fontSize: 11, color: '#444', marginLeft: 3 }}>Peso corporal</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 14 }}>
+          <span style={{ fontSize: 22, color: '#fff', fontWeight: 200, letterSpacing: '-0.5px' }}>
+            {entry.measurements['body_weight']}
+          </span>
+          <span style={{ fontSize: 13, color: '#555' }}>kg</span>
+          <span style={{ fontSize: 10, color: '#2a2a2a', letterSpacing: '1.5px', marginLeft: 3 }}>PESO CORPORAL</span>
         </div>
       )}
 
       {measurementEntries.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: activePRs.length > 0 ? 10 : 0 }}>
-          {measurementEntries.map(({ key }) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <MeasureIcon type={key} />
-              <span style={{ fontSize: 11, color: '#555' }}>{entry.measurements[key]}cm</span>
-            </div>
-          ))}
+        <div style={{ marginBottom: activePRs.length > 0 ? 12 : 0 }}>
+          <div style={{ fontSize: 9, color: '#2a2a2a', letterSpacing: '2px', marginBottom: 7 }}>MEDIDAS</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {measurementEntries.map(({ key, label }) => (
+              <div key={key} style={{
+                display: 'flex', flexDirection: 'column',
+                padding: '8px 10px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 8, border: '0.5px solid #1a1a1a',
+              }}>
+                <span style={{ fontSize: 10, color: '#3a3a3a', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>{label}</span>
+                <span style={{ fontSize: 14, color: '#aaa', fontWeight: 300 }}>
+                  {entry.measurements[key]}<span style={{ fontSize: 9, color: '#3a3a3a', marginLeft: 2 }}> cm</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {activePRs.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {activePRs.map((pr, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ExerciseIcon type={prIconType(pr.name)} />
-              <span style={{ fontSize: 12, color: '#444' }}>{pr.name}</span>
-              {pr.weight !== undefined && (
-                <span style={{ fontSize: 12, color: '#555', marginLeft: 4 }}>{pr.weight}kg</span>
-              )}
-              {pr.reps !== undefined && (
-                <span style={{ fontSize: 12, color: '#333' }}>× {pr.reps}</span>
-              )}
-            </div>
-          ))}
+        <div>
+          <div style={{ fontSize: 9, color: '#2a2a2a', letterSpacing: '2px', marginBottom: 7 }}>RÉCORDS</div>
+          <div style={{
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: 8, border: '0.5px solid #1a1a1a',
+            overflow: 'hidden',
+          }}>
+            {activePRs.map((pr, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '8px 10px',
+                borderBottom: i < activePRs.length - 1 ? '0.5px solid #161616' : 'none',
+              }}>
+                <Dumbbell size={12} className="pr-icon-grad" style={{ flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#555', flex: 1 }}>{pr.name}</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  {pr.weight !== undefined && (
+                    <span style={{ fontSize: 12, color: '#888', fontWeight: 300 }}>
+                      {pr.weight} <span style={{ fontSize: 9, color: '#444' }}>kg</span>
+                    </span>
+                  )}
+                  {pr.reps !== undefined && (
+                    <span style={{ fontSize: 11, color: '#333' }}>× {pr.reps}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </motion.div>
@@ -825,6 +793,13 @@ function MacroRing({
 }
 
 const BODY_STYLES = `
+  .pr-icon-grad path,
+  .pr-icon-grad line,
+  .pr-icon-grad circle,
+  .pr-icon-grad rect,
+  .pr-icon-grad polyline {
+    stroke: url(#prDumbbellGrad) !important;
+  }
   .progress-add-btn {
     background: none;
     border: none;
@@ -1025,6 +1000,16 @@ export default function BodyScreen() {
   return (
     <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
       <style>{BODY_STYLES}</style>
+      <svg width="0" height="0" style={{ position: 'absolute' }}>
+        <defs>
+          <linearGradient id="prDumbbellGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0" spreadMethod="repeat">
+            <stop offset="0%" stopColor="#8B5CF6" />
+            <stop offset="100%" stopColor="#06B6D4" />
+            <animate attributeName="x1" values="0;24;0" dur="3s" repeatCount="indefinite" />
+            <animate attributeName="x2" values="24;48;24" dur="3s" repeatCount="indefinite" />
+          </linearGradient>
+        </defs>
+      </svg>
 
       {/* ── Depth orbs — Linear style ──────────────────── */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
