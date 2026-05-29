@@ -924,6 +924,8 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
             color: msg.role === 'ai' ? '#aaa' : '#ddd',
             lineHeight: 1.55,
             whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
             overflow: 'hidden',
           }}>
             {msg.image && (
@@ -1042,8 +1044,8 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
               <div ref={bottomRef} />
             </div>
 
-            <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 390, height: 150, background: 'linear-gradient(to top, #080810 60%, transparent)', zIndex: 55, pointerEvents: 'none' }} />
-            <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', width: 'calc(390px - 32px)', zIndex: 60, background: 'rgba(8,8,16,0.98)', pointerEvents: 'all' }}>
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 150, background: 'linear-gradient(to top, #080810 60%, transparent)', zIndex: 55, pointerEvents: 'none' }} />
+            <div style={{ position: 'fixed', bottom: 90, left: 16, right: 16, zIndex: 60, background: 'rgba(8,8,16,0.98)', pointerEvents: 'all' }}>
               <div className="atlas-listen-line" />
 
               <AnimatePresence>
