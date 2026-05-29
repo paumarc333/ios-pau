@@ -220,6 +220,8 @@ export default function ChatScreen({ isActive }: { isActive: boolean }) {
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [recordSeconds,  setRecordSeconds]  = useState(0)
   const [recordError,    setRecordError]    = useState(false)
+  const [dbgLogs,        setDbgLogs]        = useState<string[]>([])
+  const [dbgVisible,     setDbgVisible]     = useState(false)
 
   const bottomRef        = useRef<HTMLDivElement>(null)
   const fileInputRef     = useRef<HTMLInputElement>(null)
@@ -582,6 +584,11 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
   // ── Voice recording + Whisper transcription ─────────────────────────────────
 
+  const dbg = (msg: string) => {
+    const t = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setDbgLogs(prev => [`${t} ${msg}`, ...prev].slice(0, 60))
+  }
+
   const toggleRecording = async () => {
     if (isTranscribing) return
 
@@ -594,11 +601,13 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
     }
 
     setRecordError(false)
+    setDbgVisible(true)
+    dbg('─── nueva grabación ───')
 
     try {
-      console.log('[Mic] Solicitando permiso micrófono…')
+      dbg('solicitando permiso micrófono…')
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      console.log('[Mic] Permiso concedido')
+      dbg('permiso concedido')
 
       // iOS Safari only supports audio/mp4; Chrome supports webm
       const mimeType = MediaRecorder.isTypeSupported('audio/mp4')
@@ -606,23 +615,26 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
         : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm'
-      console.log('[Mic] mimeType elegido:', mimeType)
+      dbg(`mimeType: ${mimeType}`)
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
+      let chunkCount = 0
 
       mediaRecorder.ondataavailable = (e) => {
+        chunkCount++
+        dbg(`chunk #${chunkCount}: ${e.data.size} bytes`)
         if (e.data.size > 0) audioChunksRef.current.push(e.data)
       }
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
         const blob = new Blob(audioChunksRef.current, { type: mimeType })
-        console.log('[Mic] Blob size:', blob.size, '— type:', mimeType)
+        dbg(`blob size: ${blob.size} bytes (${chunkCount} chunks)`)
 
         if (blob.size === 0) {
-          console.error('[Mic] Blob vacío, abortando')
+          dbg('ERROR: blob vacío — abortando')
           setRecordError(true)
           return
         }
@@ -630,30 +642,33 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
         setIsTranscribing(true)
         try {
           const ext = mimeType.startsWith('audio/mp4') ? 'mp4' : 'webm'
-          const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`
-          console.log('[Mic] Enviando a transcribe — ext:', ext, 'url:', url)
+          dbg(`enviando a Edge Function… (recording.${ext})`)
 
           const formData = new FormData()
           formData.append('file', blob, `recording.${ext}`)
 
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-            body: formData,
-          })
+          const res = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+              body: formData,
+            }
+          )
 
-          console.log('[Mic] Status:', res.status)
+          dbg(`status: ${res.status}`)
           const data = await res.json()
-          console.log('[Mic] Respuesta transcribe:', data)
+          dbg(`respuesta: ${JSON.stringify(data)}`)
 
           if (data.text) {
             setInput(prev => prev ? `${prev} ${data.text}` : data.text)
+            dbg('✓ transcripción OK')
           } else {
-            console.error('[Mic] Sin texto en respuesta:', data)
+            dbg(`ERROR: sin texto — ${JSON.stringify(data)}`)
             setRecordError(true)
           }
         } catch (error) {
-          console.error('[Mic] Error transcripción:', error)
+          dbg(`ERROR transcripción: ${(error as Error).message}`)
           setRecordError(true)
         } finally {
           setIsTranscribing(false)
@@ -662,12 +677,12 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
       // timeslice=1000ms: ensures ondataavailable fires every second on WebKit/iOS
       mediaRecorder.start(1000)
-      console.log('[Mic] Grabación iniciada con timeslice 1000ms')
+      dbg('grabación iniciada (timeslice 1000ms)')
       setIsRecording(true)
       setRecordSeconds(0)
       recordTimerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000)
     } catch (error) {
-      console.error('[Mic] Error acceso micrófono:', error)
+      dbg(`ERROR acceso micrófono: ${(error as Error).message}`)
       setIsRecording(false)
       setRecordError(true)
     }
@@ -1108,6 +1123,36 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
         )}
       </AnimatePresence>
+
+      {/* ── DEBUG PANEL — temporal, borrar cuando no se necesite ── */}
+      {dbgVisible && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.92)', borderTop: '1px solid #2a2a2a',
+          maxHeight: '45vh', overflowY: 'auto',
+          padding: '8px 10px 12px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, position: 'sticky', top: 0, background: 'rgba(0,0,0,0.92)', paddingBottom: 4 }}>
+            <span style={{ fontSize: 10, color: '#f97316', fontWeight: 700, letterSpacing: 1.5, fontFamily: 'monospace' }}>MIC DEBUG</span>
+            <button
+              onClick={() => { setDbgLogs([]); setDbgVisible(false) }}
+              style={{ fontSize: 10, color: '#888', background: 'none', border: '1px solid #333', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontFamily: 'monospace' }}
+            >
+              cerrar ✕
+            </button>
+          </div>
+          {dbgLogs.length === 0 ? (
+            <div style={{ fontSize: 10, color: '#444', fontFamily: 'monospace' }}>sin logs aún</div>
+          ) : dbgLogs.map((line, i) => (
+            <div key={i} style={{
+              fontSize: 10, lineHeight: 1.6, fontFamily: 'monospace',
+              color: line.includes('ERROR') ? '#EF4444' : line.includes('✓') ? '#22c55e' : line.includes('───') ? '#f97316' : '#bbb',
+            }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
