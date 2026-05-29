@@ -168,7 +168,7 @@ async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
       tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
       messages:   [{
         role:    'user',
-        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "resumen en español máximo 200 caracteres",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País"\n  }\n]\nSolo el array JSON, nada más.',
+        content: 'Busca en estos medios las noticias más importantes de hoy:\n- Fútbol: busca en marca.com las 5 noticias más importantes de hoy\n- IA y tecnología: busca en technologyreview.com y xataka.com las 5 noticias más importantes de hoy\n- Geopolítica: busca en elpais.com/internacional las 5 noticias más importantes de hoy\n\nDevuelve exactamente este JSON:\n[\n  {\n    "id": "1",\n    "headline": "titular en español",\n    "summary": "resumen en español máximo 200 caracteres",\n    "category": "Fútbol|IA & Tech|Mundo",\n    "source": "Marca|Xataka|El País",\n    "published_at": "fecha y hora de publicación en ISO 8601, o cadena vacía si no disponible"\n  }\n]\nSolo el array JSON, nada más.',
       }],
     }),
   })
@@ -184,7 +184,7 @@ async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
   const m       = cleaned.match(/\[[\s\S]*\]/)
   if (!m) return []
 
-  let articles: Array<{ id: string; headline: string; summary: string; category: string; source: string }> = []
+  let articles: Array<{ id: string; headline: string; summary: string; category: string; source: string; published_at?: string }> = []
   try {
     articles = JSON.parse(m[0])
   } catch {
@@ -192,15 +192,22 @@ async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
   }
 
   return articles
-    .map((n, i) => ({
-      id:       n.id       ?? `news-${i}`,
-      headline: n.headline ?? '',
-      summary:  n.summary  ?? '',
-      source:   n.source   ?? '',
-      datetime: Math.floor(Date.now() / 1000),
-      url:      '#',
-      category: n.category ?? '',
-    }))
+    .map((n, i) => {
+      const pubTs = (() => {
+        const s = n.published_at
+        if (!s) return null
+        try { const d = new Date(s); return isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 1000) } catch { return null }
+      })()
+      return {
+        id:       n.id       ?? `news-${i}`,
+        headline: n.headline ?? '',
+        summary:  n.summary  ?? '',
+        source:   n.source   ?? '',
+        datetime: pubTs ?? Math.floor(Date.now() / 1000),
+        url:      '#',
+        category: n.category ?? '',
+      }
+    })
     .filter(n => n.headline)
 }
 
@@ -474,45 +481,18 @@ function CategoryPill({ category }: { category: string }) {
   )
 }
 
-function FeaturedNewsCard({ item }: { item: NewsItem }) {
-  const h       = Math.floor((Date.now() / 1000 - item.datetime) / 3600)
-  const timeStr = h < 1 ? '<1h' : `${h}h`
+function NewsRow({ item, index, isLast }: { item: NewsItem; index: number; isLast: boolean }) {
+  const age  = timeAgo(new Date(item.datetime * 1000))
+  const meta = [item.source || null, age].filter(Boolean).join(' · ')
   const handleClick = () => {
     if (item.url && item.url !== '#') window.open(item.url, '_blank', 'noopener,noreferrer')
   }
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-      onClick={handleClick}
-      style={{
-        padding: '4px 0 16px',
-        borderBottom: '0.5px solid rgba(255,255,255,0.06)',
-        cursor: item.url && item.url !== '#' ? 'pointer' : 'default',
-      }}
-    >
-      <CategoryPill category={item.category} />
-      <div style={{
-        fontSize: 17, color: '#fff', fontWeight: 600, lineHeight: 1.4,
-        marginTop: 10, marginBottom: 8,
-        display: '-webkit-box', WebkitLineClamp: 3,
-        WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      }}>
-        {item.headline}
-      </div>
-      <span style={{ fontSize: 11, color: '#444' }}>{timeStr}</span>
-    </motion.div>
-  )
-}
-
-function CompactNewsRow({ item, isLast }: { item: NewsItem; isLast: boolean }) {
-  const h       = Math.floor((Date.now() / 1000 - item.datetime) / 3600)
-  const timeStr = h < 1 ? '<1h' : `${h}h`
-  const handleClick = () => {
-    if (item.url && item.url !== '#') window.open(item.url, '_blank', 'noopener,noreferrer')
-  }
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.055, duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+      whileTap={{ scale: 0.98 }}
       onClick={handleClick}
       style={{
         padding: '12px 0',
@@ -520,17 +500,20 @@ function CompactNewsRow({ item, isLast }: { item: NewsItem; isLast: boolean }) {
         cursor: item.url && item.url !== '#' ? 'pointer' : 'default',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+      <div style={{ marginBottom: 7 }}>
         <CategoryPill category={item.category} />
-        <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>{timeStr}</span>
       </div>
       <div style={{
-        fontSize: 13, color: '#e0e0e0', fontWeight: 500, lineHeight: 1.45,
+        fontSize: 13, color: '#e8e8e8', fontWeight: 500, lineHeight: 1.5,
         display: '-webkit-box', WebkitLineClamp: 2,
         WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        marginBottom: meta ? 6 : 0,
       }}>
         {item.headline}
       </div>
+      {meta && (
+        <div style={{ fontSize: 11, color: '#3a3a3a', letterSpacing: '0.2px' }}>{meta}</div>
+      )}
     </motion.div>
   )
 }
@@ -1035,26 +1018,21 @@ export default function MarketsScreen() {
           {/* Loading skeleton */}
           {loadingNews && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <Skeleton h={18} radius={10} />
-                <div style={{ marginTop: 10 }}><Skeleton h={54} radius={6} /></div>
-                <div style={{ marginTop: 8 }}><Skeleton h={10} radius={6} /></div>
-              </div>
-              {Array.from({ length: 3 }).map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i}>
                   <Skeleton h={18} radius={10} />
                   <div style={{ marginTop: 8 }}><Skeleton h={32} radius={6} /></div>
+                  <div style={{ marginTop: 6 }}><Skeleton h={10} radius={6} /></div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Featured + list */}
+          {/* Uniform news list with stagger */}
           {!loadingNews && news.length > 0 && (
             <>
-              <FeaturedNewsCard item={news[0]} />
-              {news.slice(1).map((item, i) => (
-                <CompactNewsRow key={item.id} item={item} isLast={i === news.length - 2} />
+              {news.map((item, i) => (
+                <NewsRow key={item.id} item={item} index={i} isLast={i === news.length - 1} />
               ))}
             </>
           )}
