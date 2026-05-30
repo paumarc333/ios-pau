@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
 import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Constants ────────────────────────────────────────────
-const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
+const ANTHROPIC_KEY  = import.meta.env.VITE_ANTHROPIC_API_KEY
 const TZ             = 'Europe/Madrid'
 const INSIGHT_KEY    = 'journal_monthly_insight'
-const INSIGHT_TTL    = 30 * 24 * 3600 * 1000
+const INSIGHT_META   = 'journal_insight_meta'
 
 // ── Types ────────────────────────────────────────────────
 type JournalEntry = {
@@ -17,6 +17,11 @@ type JournalEntry = {
   thought1: string | null
   thought2: string | null
   created_at: string
+}
+
+type InsightMeta = {
+  interval: 7 | 15
+  nextDate: string  // ISO date YYYY-MM-DD
 }
 
 // ── Helpers ──────────────────────────────────────────────
@@ -65,6 +70,19 @@ function getSliderColor(value: number): string {
   return stops[stops.length-1][1]
 }
 
+function getMoodWord(v: number): string {
+  if (v <= 3) return 'agotado'
+  if (v <= 6) return 'regular'
+  if (v <= 8) return 'bien'
+  return 'genial'
+}
+
+function getMoodWordRange(v: number): number {
+  if (v <= 3) return 0
+  if (v <= 6) return 1
+  if (v <= 8) return 2
+  return 3
+}
 
 function formatEntryDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -73,7 +91,46 @@ function formatEntryDate(dateStr: string): string {
   })
 }
 
-// ── iOSSlider ─────────────────────────────────────────────
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString('en-CA')
+}
+
+function diffMs(targetDateStr: string): number {
+  const target = new Date(targetDateStr + 'T00:00:00')
+  return target.getTime() - Date.now()
+}
+
+function msToCountdown(ms: number): { d: number; h: number; m: number } {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  return { d, h, m }
+}
+
+// ── useTypewriter ─────────────────────────────────────────
+function useTypewriter(text: string, msPerWord = 80) {
+  const [displayed, setDisplayed] = useState<string[]>([])
+
+  useEffect(() => {
+    setDisplayed([])
+    if (!text) return
+    const words = text.split(' ')
+    let i = 0
+    const id = setInterval(() => {
+      if (i >= words.length) { clearInterval(id); return }
+      setDisplayed(prev => [...prev, words[i]])
+      i++
+    }, msPerWord)
+    return () => clearInterval(id)
+  }, [text, msPerWord])
+
+  return displayed
+}
+
+// ── NeonSlider (floating, no card wrapper) ────────────────
 const THUMB  = 52
 const MARGIN = 6
 
@@ -88,11 +145,28 @@ function NeonSlider({
   const isDraggingRef            = useRef(false)
   const [liveValue,  setLiveValue]  = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [prevRange,  setPrevRange]  = useState<number>(-1)
 
   const displayValue = liveValue ?? score
   const pct          = displayValue === 0 ? 0 : (displayValue - 1) / 9
   const color        = displayValue === 0 ? 'rgba(255,255,255,0.25)' : getSliderColor(displayValue)
   const fillOpacity  = displayValue === 0 ? 0 : 0.15
+  const snappedInt   = Math.round(displayValue)
+  const moodWord     = getMoodWord(snappedInt)
+  const moodRange    = getMoodWordRange(snappedInt)
+
+  // Spring for thumb position (0–1)
+  const springPct = useSpring(pct, { stiffness: 400, damping: 28, mass: 0.8 })
+  const thumbLeft = useTransform(
+    springPct,
+    p => `calc(${MARGIN}px + ${p} * (100% - ${THUMB + MARGIN * 2}px))`
+  )
+  const fillW = useTransform(
+    springPct,
+    p => `calc(${MARGIN}px + ${p} * (100% - ${THUMB + MARGIN * 2}px) + ${THUMB / 2 + MARGIN}px)`
+  )
+
+  useEffect(() => { springPct.set(pct) }, [pct, springPct])
 
   const calcValue = (clientX: number): number => {
     if (!capsuleRef.current) return score
@@ -123,12 +197,39 @@ function NeonSlider({
     onChange?.(snapped)
   }
 
-  const thumbPos  = `calc(${MARGIN}px + ${pct} * (100% - ${THUMB + MARGIN * 2}px))`
-  const fillWidth = `calc(${MARGIN}px + ${pct} * (100% - ${THUMB + MARGIN * 2}px) + ${THUMB / 2 + MARGIN}px)`
-  const snapTrans = 'left 0.4s cubic-bezier(0.34,1.56,0.64,1), background 0.3s ease, box-shadow 0.3s ease'
+  // Track range changes for mood word crossfade
+  useEffect(() => {
+    if (displayValue > 0) setPrevRange(moodRange)
+  }, [moodRange, displayValue])
+
+  const showMoodWord = displayValue > 0
 
   return (
     <div style={{ marginTop: 28 }}>
+      {/* Mood word with crossfade */}
+      <div style={{ height: 24, position: 'relative', marginBottom: 12 }}>
+        <AnimatePresence mode="wait">
+          {showMoodWord && (
+            <motion.div
+              key={moodRange}
+              initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -4, filter: 'blur(4px)' }}
+              transition={{ duration: 0.22 }}
+              style={{
+                position: 'absolute', width: '100%',
+                textAlign: 'center', fontSize: 13,
+                fontWeight: 500, letterSpacing: '0.5px',
+                color: color,
+                textTransform: 'uppercase',
+              }}
+            >
+              {moodWord}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div
         ref={capsuleRef}
         style={{
@@ -145,32 +246,54 @@ function NeonSlider({
         onPointerUp={readOnly   ? undefined : onUp}
         onPointerCancel={readOnly ? undefined : onUp}
       >
-        {/* Fill */}
-        <div style={{
+        {/* Fill with gradient */}
+        <motion.div style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: fillWidth,
+          width: fillW,
           background: color, opacity: fillOpacity, borderRadius: 32,
-          transition: isDragging
-            ? 'background 0.3s ease'
-            : 'width 0.4s cubic-bezier(0.34,1.56,0.64,1), background 0.3s ease',
         }} />
 
-        {/* Thumb */}
-        <div style={{
+        {/* Thumb with spring motion */}
+        <motion.div style={{
           position: 'absolute',
-          left: thumbPos,
-          top: '50%', transform: 'translateY(-50%)',
+          left: thumbLeft,
+          top: '50%',
+          translateY: '-50%',
           width: THUMB, height: THUMB, borderRadius: '50%',
           background: color,
-          boxShadow: `0 0 20px ${color}99`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'none', zIndex: 2,
-          transition: isDragging ? 'background 0.3s ease, box-shadow 0.3s ease' : snapTrans,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-            {Math.round(displayValue)}
-          </span>
-        </div>
+          {/* Halo */}
+          <motion.div
+            animate={{
+              boxShadow: [
+                `0 0 16px 4px ${color}55`,
+                `0 0 28px 10px ${color}33`,
+                `0 0 16px 4px ${color}55`,
+              ],
+            }}
+            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+            style={{
+              position: 'absolute', inset: -6, borderRadius: '50%',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* Number with pop */}
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={snappedInt}
+              initial={{ scale: 1.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.6, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+              style={{ fontSize: 18, fontWeight: 700, color: '#fff', lineHeight: 1, position: 'relative', zIndex: 1 }}
+            >
+              {snappedInt === 0 ? '' : snappedInt}
+            </motion.span>
+          </AnimatePresence>
+        </motion.div>
       </div>
 
       {/* Scale labels */}
@@ -182,27 +305,379 @@ function NeonSlider({
   )
 }
 
-// ── Atlas Reflection Card ────────────────────────────────
+// ── Atlas Reflection (typewriter + connector) ─────────────
 function ReflectionCard({ text }: { text: string }) {
+  const words = useTypewriter(text, 70)
+  const [connectorDone, setConnectorDone] = useState(false)
+
+  return (
+    <div style={{ position: 'relative', marginTop: 8 }}>
+      {/* Animated connector */}
+      <svg
+        width="32" height="32"
+        style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}
+        viewBox="0 0 2 32"
+      >
+        <motion.line
+          x1="1" y1="0" x2="1" y2="32"
+          stroke="url(#connectorGrad)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          onAnimationComplete={() => setConnectorDone(true)}
+        />
+        <defs>
+          <linearGradient id="connectorGrad" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.08)" />
+            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.5" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: connectorDone ? 1 : 0, y: connectorDone ? 0 : 6 }}
+        transition={{ duration: 0.3 }}
+        style={{
+          background: 'rgba(139,92,246,0.07)',
+          border: '0.5px solid rgba(139,92,246,0.25)',
+          borderRadius: 14, padding: 16,
+          boxShadow: '0 0 20px rgba(139,92,246,0.08)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <Sparkles size={10} color="#06B6D4" />
+          <span style={{ fontSize: 10, color: '#06B6D4', letterSpacing: '1.5px' }}>ATLAS</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75 }}>
+          {words.map((w, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, filter: 'blur(3px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              transition={{ duration: 0.2 }}
+              style={{ marginRight: 4, display: 'inline-block' }}
+            >
+              {w}
+            </motion.span>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+// ── Mood Chart (weekly / monthly) ─────────────────────────
+function MoodChart({ entries, todayEntry }: { entries: JournalEntry[]; todayEntry: JournalEntry | null }) {
+  const [range, setRange] = useState<'week' | 'month'>('week')
+
+  const today = madridTodayKey()
+  const all = [...(todayEntry ? [todayEntry] : []), ...entries]
+
+  const data: { date: string; mood: number }[] = (() => {
+    const days = range === 'week' ? 7 : 30
+    const result: { date: string; mood: number }[] = []
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today + 'T00:00:00')
+      d.setDate(d.getDate() - i)
+      const ds = d.toLocaleDateString('en-CA')
+      const entry = all.find(e => e.date === ds)
+      result.push({ date: ds, mood: entry?.mood ?? 0 })
+    }
+    return result
+  })()
+
+  const maxMood = 10
+  const BAR_H   = 80
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={{ duration: 0.3 }}
       style={{
-        background: 'rgba(139,92,246,0.07)',
-        border: '0.5px solid rgba(139,92,246,0.2)',
-        borderRadius: 14, padding: 16, marginTop: 12,
+        background: 'rgba(255,255,255,0.03)',
+        border: '0.5px solid rgba(255,255,255,0.08)',
+        borderRadius: 18,
+        borderTop: '1px solid rgba(139,92,246,0.35)',
+        padding: '16px 16px 12px',
+        marginTop: 28,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <Sparkles size={10} color="#06B6D4" />
-        <span style={{ fontSize: 10, color: '#06B6D4', letterSpacing: '1.5px' }}>ATLAS</span>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px' }}>ÁNIMO</span>
+        {/* Toggle */}
+        <div style={{
+          display: 'flex', borderRadius: 20, overflow: 'hidden',
+          border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
+        }}>
+          {(['week', 'month'] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              style={{
+                padding: '4px 12px', fontSize: 10, border: 'none', cursor: 'pointer',
+                fontFamily: 'Inter, sans-serif', letterSpacing: '0.5px',
+                background: range === r ? 'rgba(139,92,246,0.25)' : 'transparent',
+                color: range === r ? '#fff' : 'rgba(255,255,255,0.35)',
+                transition: 'all 0.2s',
+              }}
+            >
+              {r === 'week' ? '7D' : '30D'}
+            </button>
+          ))}
+        </div>
       </div>
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7 }}>
-        {text}
+
+      {/* Bars */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', gap: range === 'month' ? 2 : 4,
+        height: BAR_H + 20, paddingBottom: 20, position: 'relative',
+      }}>
+        {data.map((d, i) => {
+          const pct   = d.mood > 0 ? d.mood / maxMood : 0
+          const color = d.mood > 0 ? getScoreColor(d.mood) : 'rgba(255,255,255,0.06)'
+          const isToday = d.date === today
+          const dayLbl = range === 'week'
+            ? new Date(d.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'narrow' })
+            : (i % 5 === 0 ? new Date(d.date + 'T00:00:00').getDate().toString() : '')
+
+          return (
+            <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: pct * BAR_H }}
+                transition={{ duration: 0.5, delay: i * 0.02, ease: 'easeOut' }}
+                style={{
+                  width: '100%', borderRadius: 4,
+                  background: d.mood > 0
+                    ? `linear-gradient(180deg, ${color}, ${color}88)`
+                    : color,
+                  boxShadow: isToday && d.mood > 0 ? `0 0 8px ${color}66` : 'none',
+                  border: isToday ? `0.5px solid ${color}` : 'none',
+                  minHeight: pct > 0 ? 4 : 2,
+                  alignSelf: 'flex-end',
+                }}
+              />
+              {dayLbl && (
+                <span style={{
+                  fontSize: 9, color: isToday ? '#fff' : 'rgba(255,255,255,0.2)',
+                  fontWeight: isToday ? 600 : 400,
+                }}>
+                  {dayLbl}
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
     </motion.div>
+  )
+}
+
+// ── FlipCard ──────────────────────────────────────────────
+function FlipCard({ value, label }: { value: number; label: string }) {
+  const str     = String(value).padStart(2, '0')
+  const prevRef = useRef(str)
+  const [flip, setFlip] = useState(false)
+
+  useEffect(() => {
+    if (prevRef.current !== str) {
+      setFlip(true)
+      const id = setTimeout(() => {
+        setFlip(false)
+        prevRef.current = str
+      }, 350)
+      return () => clearTimeout(id)
+    }
+  }, [str])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      <div style={{
+        position: 'relative', width: 56, height: 64,
+        perspective: '200px',
+      }}>
+        {/* Static back (new value) */}
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: 10,
+          background: 'rgba(139,92,246,0.12)',
+          border: '0.5px solid rgba(139,92,246,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 26, fontWeight: 700, color: '#fff',
+          fontVariantNumeric: 'tabular-nums',
+          backdropFilter: 'blur(10px)',
+        }}>
+          {str}
+        </div>
+        {/* Animated flap (old value) */}
+        <AnimatePresence>
+          {flip && (
+            <motion.div
+              key={prevRef.current}
+              initial={{ rotateX: 0 }}
+              animate={{ rotateX: -90 }}
+              exit={{}}
+              transition={{ duration: 0.18, ease: 'easeIn' }}
+              style={{
+                position: 'absolute', inset: 0, borderRadius: 10,
+                background: 'rgba(139,92,246,0.18)',
+                border: '0.5px solid rgba(139,92,246,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 26, fontWeight: 700, color: '#fff',
+                fontVariantNumeric: 'tabular-nums',
+                transformOrigin: 'center bottom',
+                backfaceVisibility: 'hidden',
+                zIndex: 2,
+              }}
+            >
+              {prevRef.current}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Crease line */}
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: '50%',
+          height: '0.5px', background: 'rgba(0,0,0,0.3)', zIndex: 3,
+          pointerEvents: 'none',
+        }} />
+      </div>
+      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: '1.5px' }}>{label}</span>
+    </div>
+  )
+}
+
+// ── FlipCountdown ─────────────────────────────────────────
+function FlipCountdown({
+  meta,
+  onIntervalChange,
+  onTrigger,
+  loading,
+}: {
+  meta: InsightMeta
+  onIntervalChange: (v: 7 | 15) => void
+  onTrigger: () => void
+  loading: boolean
+}) {
+  const [countdown, setCountdown] = useState(msToCountdown(diffMs(meta.nextDate)))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const ms = diffMs(meta.nextDate)
+      setCountdown(msToCountdown(ms))
+      if (ms <= 0) onTrigger()
+    }, 1000)
+    return () => clearInterval(id)
+  }, [meta.nextDate, onTrigger])
+
+  const { d, h, m } = countdown
+  const expired = d === 0 && h === 0 && m === 0
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.04)', marginBottom: 20 }} />
+
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'relative', width: 22, height: 22, flexShrink: 0 }}>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+              style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
+              }}
+            />
+            <div style={{
+              position: 'absolute', inset: 1.5, borderRadius: '50%', background: '#080810',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Sparkles size={10} color="#fff" />
+            </div>
+          </div>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+            Próximo insight
+          </span>
+        </div>
+
+        {/* Interval toggle */}
+        <div style={{
+          display: 'flex', borderRadius: 20, overflow: 'hidden',
+          border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
+        }}>
+          {([7, 15] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => onIntervalChange(v)}
+              style={{
+                padding: '4px 10px', fontSize: 10, border: 'none', cursor: 'pointer',
+                fontFamily: 'Inter, sans-serif',
+                background: meta.interval === v ? 'rgba(139,92,246,0.25)' : 'transparent',
+                color: meta.interval === v ? '#fff' : 'rgba(255,255,255,0.3)',
+                transition: 'all 0.2s',
+              }}
+            >
+              {v}d
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Flip cards */}
+      {!expired && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+          <FlipCard value={d} label="DÍAS" />
+          <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
+          <FlipCard value={h} label="HORAS" />
+          <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
+          <FlipCard value={m} label="MIN" />
+        </div>
+      )}
+
+      {/* Loading state when expired and generating */}
+      {expired && loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+          <div style={{ position: 'relative', width: 48, height: 48 }}>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+              style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
+              }}
+            />
+            <div style={{
+              position: 'absolute', inset: 2, borderRadius: '50%', background: '#080810',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Sparkles size={16} color="#fff" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual trigger when expired */}
+      {expired && !loading && (
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={onTrigger}
+          style={{
+            width: '100%', borderRadius: 14, padding: '13px 0',
+            background: 'rgba(139,92,246,0.15)',
+            border: '0.5px solid rgba(139,92,246,0.4)',
+            color: '#fff', fontSize: 13, cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif', fontWeight: 500,
+          }}
+        >
+          Generar insight ahora
+        </motion.button>
+      )}
+    </div>
   )
 }
 
@@ -222,12 +697,27 @@ export default function JournalScreen() {
   const [monthlyInsightLoading,  setMonthlyInsightLoading]  = useState(false)
   const [monthlyInsightVisible,  setMonthlyInsightVisible]  = useState(false)
   const [currentTime,            setCurrentTime]            = useState(madridCurrentTime())
+  const [insightMeta,            setInsightMeta]            = useState<InsightMeta>(() => {
+    try {
+      const raw = localStorage.getItem(INSIGHT_META)
+      if (raw) return JSON.parse(raw) as InsightMeta
+    } catch { /* ignore */ }
+    const nextDate = addDays(madridTodayKey(), 7)
+    return { interval: 7, nextDate }
+  })
+
+  const insightAutoTriggered = useRef(false)
 
   // Update clock every minute
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(madridCurrentTime()), 60_000)
     return () => clearInterval(id)
   }, [])
+
+  // ── Persist insight meta ───────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem(INSIGHT_META, JSON.stringify(insightMeta)) } catch { /* ignore */ }
+  }, [insightMeta])
 
   // ── Load data ──────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -260,9 +750,10 @@ export default function JournalScreen() {
     try {
       const raw = localStorage.getItem(INSIGHT_KEY)
       if (!raw) return
-      const { ts, text } = JSON.parse(raw) as { ts: number; text: string }
-      if (Date.now() - ts < INSIGHT_TTL) {
+      const { text } = JSON.parse(raw) as { text: string }
+      if (text) {
         setMonthlyInsight(text)
+        setMonthlyInsightVisible(true)
       }
     } catch { /* ignore */ }
   }, [])
@@ -284,7 +775,6 @@ export default function JournalScreen() {
     try {
       const today = madridTodayKey()
 
-      // 1. Insert or update journal entry
       let entryId: string
       if (editMode && todayEntry) {
         const { data, error } = await supabase
@@ -305,7 +795,7 @@ export default function JournalScreen() {
         entryId = data.id
       }
 
-      // 2. Get Atlas reflection
+      // Atlas reflection
       let reflection = ''
       try {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -317,7 +807,7 @@ export default function JournalScreen() {
             'anthropic-dangerous-direct-browser-access': 'true',
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-5',
+            model: 'claude-sonnet-4-6',
             max_tokens: 200,
             system: 'Eres Atlas. Respondes de forma directa, empática y sin filtros. Máximo 60 palabras.',
             messages: [{
@@ -330,7 +820,6 @@ export default function JournalScreen() {
         reflection = d.content?.[0]?.text ?? ''
       } catch { /* continue without reflection */ }
 
-      // 3. Save reflection to journal entry
       if (reflection) {
         await supabase
           .from('journal_entries')
@@ -338,7 +827,7 @@ export default function JournalScreen() {
           .eq('id', entryId)
       }
 
-      // 4. Append to atlas_memory (category: emociones)
+      // Atlas memory
       const summary = `${today}: score ${score}/10. ${(notes || '').split(' ').slice(0, 20).join(' ')}`
       await supabase.from('atlas_memory').insert([{
         category: 'emociones',
@@ -368,7 +857,7 @@ export default function JournalScreen() {
   }
 
   // ── Monthly insight ────────────────────────────────────
-  const runMonthlyInsight = async () => {
+  const runMonthlyInsight = useCallback(async () => {
     if (monthlyInsightLoading || !ANTHROPIC_KEY) return
     setMonthlyInsightLoading(true)
     try {
@@ -401,13 +890,31 @@ export default function JournalScreen() {
         setMonthlyInsight(text)
         setMonthlyInsightVisible(true)
         try { localStorage.setItem(INSIGHT_KEY, JSON.stringify({ ts: Date.now(), text })) } catch { /* ignore */ }
+        // Reset countdown
+        setInsightMeta(prev => ({
+          ...prev,
+          nextDate: addDays(madridTodayKey(), prev.interval),
+        }))
+        insightAutoTriggered.current = false
       }
     } catch { /* ignore */ }
     finally { setMonthlyInsightLoading(false) }
+  }, [monthlyInsightLoading, todayEntry, history])
+
+  const handleCountdownTrigger = useCallback(() => {
+    if (insightAutoTriggered.current) return
+    insightAutoTriggered.current = true
+    runMonthlyInsight()
+  }, [runMonthlyInsight])
+
+  const handleIntervalChange = (v: 7 | 15) => {
+    setInsightMeta({ interval: v, nextDate: addDays(madridTodayKey(), v) })
   }
 
   // ── Derived ────────────────────────────────────────────
-  const showForm = !todayEntry || editMode
+  const showForm  = !todayEntry || editMode
+  const today     = madridTodayKey()
+  const showReflection = todayEntry?.thought2 && todayEntry.date === today
 
   // ── Render ─────────────────────────────────────────────
   return (
@@ -443,7 +950,7 @@ export default function JournalScreen() {
       </div>
 
       {/* ── Scroll area ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 0', position: 'relative', zIndex: 1 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 40px', position: 'relative', zIndex: 1 }}>
 
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
@@ -473,7 +980,7 @@ export default function JournalScreen() {
                   </div>
                 </div>
 
-                {/* Slider */}
+                {/* Slider — floating, no extra card wrapper */}
                 <NeonSlider score={score} onChange={setScore} />
 
                 {/* Notes textarea */}
@@ -565,10 +1072,12 @@ export default function JournalScreen() {
                   </div>
                 )}
 
-                {/* Atlas reflection */}
-                {todayEntry.thought2 && (
-                  <ReflectionCard text={todayEntry.thought2} />
-                )}
+                {/* Atlas reflection — only today's entry */}
+                <AnimatePresence>
+                  {showReflection && (
+                    <ReflectionCard text={todayEntry.thought2!} />
+                  )}
+                </AnimatePresence>
 
                 {/* Edit button */}
                 <motion.button
@@ -586,9 +1095,14 @@ export default function JournalScreen() {
               </motion.div>
             )}
 
+            {/* ══ GRÁFICA SEMANAL/MENSUAL ══ */}
+            {(history.length > 0 || todayEntry) && (
+              <MoodChart entries={history} todayEntry={todayEntry} />
+            )}
+
             {/* ══ HISTORIAL ══ */}
             {history.length > 0 && (
-              <div style={{ marginTop: 36 }}>
+              <div style={{ marginTop: 28 }}>
                 <div style={{ fontSize: 9, color: '#252525', letterSpacing: '2.5px', marginBottom: 12 }}>
                   HISTORIAL
                 </div>
@@ -610,25 +1124,18 @@ export default function JournalScreen() {
                           style={{ padding: '12px 0', cursor: 'pointer' }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            {/* Date */}
                             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', minWidth: 90, flexShrink: 0 }}>
                               {formatEntryDate(entry.date)}
                             </div>
-
-                            {/* Score bar */}
                             <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
                               <div style={{
                                 width: `${entry.mood * 10}%`, height: '100%',
                                 background: eGradient, borderRadius: 2,
                               }} />
                             </div>
-
-                            {/* Score label */}
                             <div style={{ fontSize: 12, color: eColor, fontWeight: 500, minWidth: 32, textAlign: 'right' }}>
                               {entry.mood}/10
                             </div>
-
-                            {/* Expand icon */}
                             <div style={{ flexShrink: 0 }}>
                               {isExpanded
                                 ? <ChevronUp size={14} color="#333" />
@@ -637,7 +1144,6 @@ export default function JournalScreen() {
                           </div>
                         </motion.div>
 
-                        {/* Expanded detail */}
                         <AnimatePresence>
                           {isExpanded && (
                             <motion.div
@@ -659,6 +1165,7 @@ export default function JournalScreen() {
                                     {entry.thought1}
                                   </div>
                                 )}
+                                {/* Historial: reflection shown for past entries too */}
                                 {entry.thought2 && (
                                   <div style={{
                                     background: 'rgba(139,92,246,0.07)',
@@ -685,92 +1192,30 @@ export default function JournalScreen() {
               </div>
             )}
 
-            {/* ══ INSIGHT MENSUAL ══ */}
-            <div style={{ marginTop: 36 }}>
-              <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.04)', marginBottom: 8 }} />
+            {/* ══ FLIP COUNTDOWN + INSIGHT ══ */}
+            <FlipCountdown
+              meta={insightMeta}
+              onIntervalChange={handleIntervalChange}
+              onTrigger={handleCountdownTrigger}
+              loading={monthlyInsightLoading}
+            />
 
-              {/* Loading spinner */}
-              {monthlyInsightLoading && (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-                  <div style={{ position: 'relative', width: 56, height: 56 }}>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                      style={{
-                        position: 'absolute', inset: 0, borderRadius: '50%',
-                        background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
-                      }}
-                    />
-                    <div style={{
-                      position: 'absolute', inset: 2, borderRadius: '50%', background: '#080810',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Sparkles size={18} color="#fff" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Trigger button */}
-              {!monthlyInsightLoading && (!monthlyInsight || !monthlyInsightVisible) && (
-                <motion.button
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => monthlyInsight ? setMonthlyInsightVisible(true) : runMonthlyInsight()}
-                  style={{
-                    background: 'none', border: 'none',
-                    cursor: 'pointer', display: 'block',
-                    padding: '16px 0', margin: '0 auto',
-                  }}
-                >
-                  <div style={{ position: 'relative', width: 56, height: 56 }}>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-                      style={{
-                        position: 'absolute', inset: 0, borderRadius: '50%',
-                        background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
-                      }}
-                    />
-                    <div style={{
-                      position: 'absolute', inset: 2, borderRadius: '50%', background: '#080810',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Sparkles size={20} color="#fff" />
-                    </div>
-                  </div>
-                </motion.button>
-              )}
-
-              {/* Insight result */}
+            {/* Insight result */}
+            <AnimatePresence>
               {!monthlyInsightLoading && monthlyInsight && monthlyInsightVisible && (
                 <motion.div
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }} transition={{ duration: 0.3 }}
+                  style={{ marginTop: 16 }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-                        style={{
-                          position: 'absolute', inset: 0, borderRadius: '50%',
-                          background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
-                        }}
-                      />
-                      <div style={{
-                        position: 'absolute', inset: 1.5, borderRadius: '50%', background: '#080810',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <Sparkles size={12} color="#fff" />
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>Insight mensual</div>
-                  </div>
-
                   <div style={{
                     background: 'rgba(139,92,246,0.05)',
                     border: '0.5px solid rgba(139,92,246,0.15)',
-                    borderRadius: 12, padding: 16,
+                    borderRadius: 14, padding: 16,
                   }}>
+                    <div style={{ fontSize: 9, color: '#06B6D4', letterSpacing: '1.5px', marginBottom: 10 }}>
+                      ATLAS · INSIGHT
+                    </div>
                     <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
                       {monthlyInsight}
                     </div>
@@ -790,7 +1235,7 @@ export default function JournalScreen() {
                   </div>
                 </motion.div>
               )}
-            </div>
+            </AnimatePresence>
 
           </>
         )}
