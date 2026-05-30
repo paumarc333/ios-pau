@@ -4,7 +4,7 @@ import { Camera, ArrowUp, Mic, Square } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { addTaskFromAtlas } from './FeedScreen'
 
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
+const CLAUDE_PROXY = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
 const PAGE_SIZE = 50
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
@@ -404,14 +404,9 @@ Es lunes. Genera un resumen semanal breve e introspectivo para Pau. Incluye: una
 Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto relevante en la memoria (proyectos, emociones, deporte), añade un recordatorio o intención del día. Termina con una frase estoica breve (Marco Aurelio, Séneca o Epicteto) relacionada con crecimiento, disciplina o constancia, en una línea separada, de forma natural. Sin florituras ni citas con comillas excesivas. Máximo 150 palabras en total.`
       }
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
           max_tokens: maxTokens,
@@ -540,14 +535,9 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
   // ── API ──────────────────────────────────────────────────────────────────────
 
   const callAnthropic = async (apiMessages: ApiMessage[], systemPrompt: string) => {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(CLAUDE_PROXY, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 1024,
@@ -718,14 +708,9 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit',
       }).format(new Date())
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
           max_tokens: 512,

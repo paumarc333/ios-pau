@@ -4,7 +4,7 @@ import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Constants ────────────────────────────────────────────
-const ANTHROPIC_KEY  = import.meta.env.VITE_ANTHROPIC_API_KEY
+const CLAUDE_PROXY   = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
 const TZ             = 'Europe/Madrid'
 const INSIGHT_KEY    = 'journal_monthly_insight'
 const INSIGHT_META   = 'journal_insight_meta'
@@ -798,14 +798,9 @@ export default function JournalScreen() {
       // Atlas reflection
       let reflection = ''
       try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(CLAUDE_PROXY, {
           method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-api-key': ANTHROPIC_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
+          headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             model: 'claude-sonnet-4-6',
             max_tokens: 200,
@@ -858,7 +853,7 @@ export default function JournalScreen() {
 
   // ── Monthly insight ────────────────────────────────────
   const runMonthlyInsight = useCallback(async () => {
-    if (monthlyInsightLoading || !ANTHROPIC_KEY) return
+    if (monthlyInsightLoading) return
     setMonthlyInsightLoading(true)
     try {
       const allEntries = [...(todayEntry ? [todayEntry] : []), ...history].slice(0, 30)
@@ -866,14 +861,9 @@ export default function JournalScreen() {
         .map(e => `${e.date}: ${e.mood}/10${e.thought1 ? ` — ${e.thought1}` : ''}`)
         .join('\n')
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-opus-4-8',
           max_tokens: 400,

@@ -29,7 +29,7 @@ interface NewsItem {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FINNHUB_KEY       = import.meta.env.VITE_FINNHUB_KEY       || ''
-const ANTHROPIC_KEY     = import.meta.env.VITE_ANTHROPIC_API_KEY  || ''
+const CLAUDE_PROXY      = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL       || ''
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY  || ''
 const USE_MOCK          = !FINNHUB_KEY
@@ -153,14 +153,9 @@ async function writeNewsCache(articles: NewsItem[]): Promise<void> {
 }
 
 async function fetchNewsViaAtlas(): Promise<NewsItem[]> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(CLAUDE_PROXY, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key':    ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model:      'claude-sonnet-4-5',
       max_tokens: 4500,
@@ -250,14 +245,9 @@ async function atlasAnalysis(indices: Quote[], watchlist: Quote[], headlines: st
     headlines.length ? '\nNOTICIAS:\n' + newsLines.join('\n') : '',
     '\nAnálisis breve en español, máx 3 frases directas sobre el estado del mercado hoy. Sin saludos.',
   ].join('')
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(CLAUDE_PROXY, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model:      'claude-sonnet-4-5',
       max_tokens: 220,
@@ -838,17 +828,12 @@ export default function MarketsScreen() {
 
 
   const runDeepResearch = async () => {
-    if (deepResearchLoading || !ANTHROPIC_KEY) return
+    if (deepResearchLoading) return
     setDeepResearchLoading(true)
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key':    ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model:      'claude-opus-4-8',
           max_tokens: 600,
@@ -873,7 +858,7 @@ export default function MarketsScreen() {
   }
 
   const refreshNews = async () => {
-    if (newsRefreshing || !ANTHROPIC_KEY) return
+    if (newsRefreshing) return
     setNewsRefreshing(true)
     try {
       const items = await fetchNewsViaAtlas()
