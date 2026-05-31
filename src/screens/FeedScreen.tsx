@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Check, Clock, Trash2, Calendar } from 'lucide-react'
+import { Plus, X, Check, Clock, Trash2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Types ────────────────────────────────────────────────
@@ -53,38 +53,37 @@ const MONTH_NAMES_ES = [
 
 // ── Madrid timezone helpers ──────────────────────────────
 
-// YYYY-MM-DD of any Date in Europe/Madrid
-function toMadridKey(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d)
+// YYYY-MM-DD of any Date in the device's LOCAL timezone
+function localKey(d: Date): string {
+  return d.toLocaleDateString('en-CA')
 }
 
-// Today's YYYY-MM-DD in Madrid
-function madridTodayKey(): string {
-  return toMadridKey(new Date())
+// Today's YYYY-MM-DD in local time
+function localTodayKey(): string {
+  return localKey(new Date())
 }
 
-// Add N calendar days to a YYYY-MM-DD key (no timezone artifacts)
+// Add N calendar days to a YYYY-MM-DD key (pure local math, no TZ artifacts)
 function addDays(key: string, n: number): string {
   const [y, m, d] = key.split('-').map(Number)
-  const date = new Date(y, m - 1, d + n)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return localKey(new Date(y, m - 1, d + n))
 }
 
-// Stored UTC ISO string → Madrid calendar date key
+// Stored UTC ISO string → LOCAL calendar date key
 function dateKey(isoStr: string): string {
-  return toMadridKey(new Date(isoStr))
+  return localKey(new Date(isoStr))
 }
 
-// Display hour:minute in Madrid timezone
+// Display hour:minute in local time
 function formatHour(isoStr: string): string {
-  return new Intl.DateTimeFormat('es-ES', {
-    timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(new Date(isoStr))
+  return new Date(isoStr).toLocaleTimeString('es-ES', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
 }
 
-// Day label for a YYYY-MM-DD key, relative to today in Madrid
+// Day label for a YYYY-MM-DD key, relative to today (local)
 function getDayLabel(key: string): string {
-  const today = madridTodayKey()
+  const today = localTodayKey()
   const [ty, tm, td] = today.split('-').map(Number)
   const [ky, km, kd] = key.split('-').map(Number)
   const diff = Math.round(
@@ -107,12 +106,12 @@ function madridLocalToUTC(year: number, month0: number, day: number, hour: numbe
   return new Date(Date.UTC(year, month0, day, hour, min, 0) - offsetMs)
 }
 
-// Highest-priority task in a list
-function topPriority(list: Task[]): Priority {
-  return list.reduce<Priority>(
-    (best, t) => PRIORITY_RANK[t.priority] > PRIORITY_RANK[best] ? t.priority : best,
-    'green',
-  )
+// Up to 3 dots for a day, ordered by priority (highest first), using Feed colors
+function priorityDots(list: Task[]): Priority[] {
+  return [...list]
+    .sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority])
+    .slice(0, 3)
+    .map(t => t.priority)
 }
 
 // Build calendar grid for a month (Monday-first weeks, pure string keys)
@@ -143,7 +142,7 @@ function buildMonthGrid(year: number, month: number): MonthCell[] {
 
 // Postpone options calculated in Madrid timezone
 function getPostponeOptions(): PostponeOption[] {
-  const todayK  = madridTodayKey()
+  const todayK  = localTodayKey()
   const [y, m, d] = todayK.split('-').map(Number)
   const month0  = m - 1
   const dow     = new Date(y, month0, d).getDay()
@@ -201,6 +200,10 @@ export default function FeedScreen() {
   const [viewMode,       setViewMode]       = useState<'list' | 'calendar'>('list')
   const [showMore,       setShowMore]       = useState(false)
   const [calSheetDay,    setCalSheetDay]    = useState<string | null>(null)
+  const [calCursor,      setCalCursor]      = useState<{ year: number; month: number }>(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() }
+  })
 
   const [newTitle,    setNewTitle]    = useState('')
   const [newType,     setNewType]     = useState<TaskType>('task')
@@ -232,18 +235,18 @@ export default function FeedScreen() {
 
   useEffect(() => { loadTasks() }, [loadTasks])
 
-  // Scroll to current month when calendar view activates
-  useEffect(() => {
-    if (viewMode !== 'calendar') return
-    const id = setTimeout(() => {
-      const container = contentRef.current
-      if (!container) return
-      const monthId = todayKey.slice(0, 7)
-      const el = container.querySelector(`[data-month-id="${monthId}"]`) as HTMLElement | null
-      if (el) container.scrollTop = Math.max(0, el.offsetTop - 12)
-    }, 380)
-    return () => clearTimeout(id)
-  }, [viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Open the calendar always positioned on the current local month
+  const openCalendar = () => {
+    setExpanded(null)
+    setViewMode(v => {
+      if (v === 'list') {
+        const now = new Date()
+        setCalCursor({ year: now.getFullYear(), month: now.getMonth() })
+        return 'calendar'
+      }
+      return 'list'
+    })
+  }
 
   // ── Actions ──────────────────────────────────────────
   async function markDone(task: Task) {
@@ -306,9 +309,8 @@ export default function FeedScreen() {
     }
   }
 
-  // ── Grouping (Madrid timezone) ───────────────────────
-  const todayKey   = madridTodayKey()
-  const currentYear = parseInt(todayKey.split('-')[0], 10)
+  // ── Grouping (device-local time) ─────────────────────
+  const todayKey = localTodayKey()
 
   const mainDayKeys:     string[] = Array.from({ length: 16 }, (_, i) => addDays(todayKey, i))
   const extendedDayKeys: string[] = Array.from({ length: 60 }, (_, i) => addDays(todayKey, 16 + i))
@@ -327,12 +329,6 @@ export default function FeedScreen() {
   }
 
   const moreCount = extendedDayKeys.reduce((n, k) => n + (grouped[k]?.length ?? 0), 0)
-
-  // Jan currentYear → Dec (currentYear + 1) = 24 months
-  const months: Array<{ year: number; month: number }> = []
-  for (let y = currentYear; y <= currentYear + 1; y++)
-    for (let mo = 0; mo < 12; mo++)
-      months.push({ year: y, month: mo })
 
   // ── Shared helpers ───────────────────────────────────
   const renderCards = (list: Task[]) =>
@@ -356,6 +352,12 @@ export default function FeedScreen() {
     width: '100%', boxSizing: 'border-box',
   }
 
+  const navBtn: React.CSSProperties = {
+    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+    background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.08)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  }
+
   // ── Render ───────────────────────────────────────────
   return (
     <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
@@ -376,13 +378,22 @@ export default function FeedScreen() {
         }} />
       </div>
 
-      {/* ── Header ── */}
-      <div style={{ padding: '20px 20px 0', flexShrink: 0, position: 'relative', zIndex: 1 }}>
-        {/* LED gradient line */}
-        <div style={{
-          height: 1,
-          background: 'linear-gradient(90deg, transparent, #8B5CF6, #06B6D4, #EC4899, transparent)',
-        }} />
+      {/* ── Header — calendar toggle (square, top-right) ── */}
+      <div style={{ padding: '14px 16px 4px', flexShrink: 0, position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={openCalendar}
+          aria-label="Calendario"
+          style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: viewMode === 'calendar' ? 'rgba(139,92,246,0.18)' : 'rgba(255,255,255,0.04)',
+            border: `0.5px solid ${viewMode === 'calendar' ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.2s, border 0.2s',
+          }}
+        >
+          <Calendar size={16} color={viewMode === 'calendar' ? '#8B5CF6' : '#888'} />
+        </motion.button>
       </div>
 
       {/* ── Content ── */}
@@ -470,81 +481,88 @@ export default function FeedScreen() {
               </motion.div>
             )}
 
-            {/* ═══ CALENDAR VIEW ═══ */}
+            {/* ═══ CALENDAR VIEW — single paged month ═══ */}
             {viewMode === 'calendar' && (
               <motion.div
                 key="calendar"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
               >
-                {months.map(({ year, month }) => {
-                  const monthId = `${year}-${String(month + 1).padStart(2, '0')}`
-                  const cells   = buildMonthGrid(year, month)
+                {/* Month navigation */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 14 }}>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setCalCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })}
+                    aria-label="Mes anterior"
+                    style={navBtn}
+                  >
+                    <ChevronLeft size={18} color="#888" />
+                  </motion.button>
+                  <div style={{ fontSize: 13, color: '#ccc', letterSpacing: '2px', fontWeight: 500 }}>
+                    {MONTH_NAMES_ES[calCursor.month]} {calCursor.year}
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setCalCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })}
+                    aria-label="Mes siguiente"
+                    style={navBtn}
+                  >
+                    <ChevronRight size={18} color="#888" />
+                  </motion.button>
+                </div>
 
-                  return (
-                    <div key={monthId} data-month-id={monthId}>
-                      <div style={{
-                        fontSize: 11, color: 'rgba(255,255,255,0.35)',
-                        letterSpacing: '2px', marginTop: 24, marginBottom: 10,
-                      }}>
-                        {MONTH_NAMES_ES[month]} {year}
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
-                        {CAL_HEADERS.map(h => (
-                          <div key={h} style={{
-                            textAlign: 'center', fontSize: 10,
-                            color: 'rgba(255,255,255,0.25)', padding: '3px 0',
-                          }}>
-                            {h}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-                        {cells.map((cell, ci) => {
-                          const dayTasks = cell.key ? (grouped[cell.key] ?? []) : []
-                          const hasTasks = dayTasks.length > 0
-                          const isToday  = cell.key === todayKey
-                          const isPast   = cell.key ? cell.key < todayKey : false
-
-                          return (
-                            <motion.div
-                              key={`${monthId}-${ci}`}
-                              whileTap={hasTasks ? { scale: 0.88 } : {}}
-                              onClick={() => hasTasks && cell.key && setCalSheetDay(cell.key)}
-                              style={{
-                                height: 36, borderRadius: 8,
-                                border: isToday ? '1px solid #8B5CF6' : 'none',
-                                background: isToday
-                                  ? 'rgba(139,92,246,0.3)'
-                                  : hasTasks ? 'rgba(255,255,255,0.05)' : 'transparent',
-                                display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', justifyContent: 'center',
-                                cursor: hasTasks ? 'pointer' : 'default',
-                                opacity: !cell.isCurrentMonth ? 0.25 : isPast && !isToday ? 0.4 : 1,
-                              }}
-                            >
-                              <span style={{
-                                fontSize: 12, lineHeight: 1,
-                                color: isToday ? '#fff' : cell.isCurrentMonth ? '#ccc' : 'rgba(255,255,255,0.4)',
-                                fontWeight: isToday ? 500 : 300,
-                              }}>
-                                {cell.dayNum}
-                              </span>
-                              {hasTasks && (
-                                <div style={{
-                                  width: 4, height: 4, borderRadius: '50%', marginTop: 2,
-                                  background: PRIORITY_COLOR[topPriority(dayTasks)],
-                                }} />
-                              )}
-                            </motion.div>
-                          )
-                        })}
-                      </div>
+                {/* Weekday headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+                  {CAL_HEADERS.map(h => (
+                    <div key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.25)', padding: '3px 0' }}>
+                      {h}
                     </div>
-                  )
-                })}
+                  ))}
+                </div>
+
+                {/* Day grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+                  {buildMonthGrid(calCursor.year, calCursor.month).map((cell, ci) => {
+                    const dayTasks = cell.key ? (grouped[cell.key] ?? []) : []
+                    const hasTasks = dayTasks.length > 0
+                    const isToday  = cell.key === todayKey
+                    const dots     = priorityDots(dayTasks)
+
+                    return (
+                      <motion.div
+                        key={`${calCursor.year}-${calCursor.month}-${ci}`}
+                        whileTap={hasTasks ? { scale: 0.88 } : {}}
+                        onClick={() => hasTasks && cell.key && setCalSheetDay(cell.key)}
+                        style={{
+                          height: 44, borderRadius: 8,
+                          border: isToday ? '1px solid #8B5CF6' : 'none',
+                          background: isToday
+                            ? 'rgba(139,92,246,0.25)'
+                            : hasTasks ? 'rgba(255,255,255,0.05)' : 'transparent',
+                          display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center', gap: 3,
+                          cursor: hasTasks ? 'pointer' : 'default',
+                          opacity: cell.isCurrentMonth ? 1 : 0.25,
+                        }}
+                      >
+                        <span style={{
+                          fontSize: 12, lineHeight: 1,
+                          color: isToday ? '#fff' : cell.isCurrentMonth ? '#ccc' : 'rgba(255,255,255,0.4)',
+                          fontWeight: isToday ? 600 : 300,
+                        }}>
+                          {cell.dayNum}
+                        </span>
+                        {dots.length > 0 && (
+                          <div style={{ display: 'flex', gap: 3, height: 4 }}>
+                            {dots.map((p, di) => (
+                              <div key={di} style={{ width: 4, height: 4, borderRadius: '50%', background: PRIORITY_COLOR[p] }} />
+                            ))}
+                          </div>
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
                 <div style={{ height: 24 }} />
               </motion.div>
             )}
@@ -553,24 +571,7 @@ export default function FeedScreen() {
         )}
       </div>
 
-      {/* ── FABs ── */}
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        onClick={() => { setViewMode(v => v === 'list' ? 'calendar' : 'list'); setExpanded(null) }}
-        style={{
-          position: 'fixed', bottom: 100, left: 'calc(50% - 195px + 20px)',
-          width: 48, height: 48, borderRadius: '50%',
-          background: 'rgba(139,92,246,0.3)',
-          border: '0.5px solid rgba(139,92,246,0.5)',
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          filter: 'drop-shadow(0 0 8px rgba(139,92,246,0.6))',
-          zIndex: 100,
-        }}
-      >
-        <Calendar size={20} color="#8B5CF6" />
-      </motion.button>
-
+      {/* ── Add FAB ── */}
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={() => setShowAdd(true)}
