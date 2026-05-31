@@ -1027,7 +1027,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', overscrollBehavior: 'none', touchAction: 'none' }}
           >
             <AtlasOrb onClick={enterChat} />
           </motion.div>
