@@ -14,7 +14,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div style={{ flex: 1, minHeight: 0, paddingBottom: 90 }}>
+      <div style={{ flex: 1, minHeight: 0, paddingBottom: 'calc(90px + env(safe-area-inset-bottom))' }}>
         {activeTab === 'chat'    && <ChatScreen isActive={true} />}
         {activeTab === 'body'    && <BodyScreen />}
         {activeTab === 'markets' && <MarketsScreen />}

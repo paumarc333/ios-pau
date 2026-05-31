@@ -69,7 +69,7 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
         transition={{ duration: 0.2 }}
         style={{
           position: 'sticky',
-          bottom: 20,
+          bottom: 'calc(20px + env(safe-area-inset-bottom))',
           zIndex: 50,
           margin: '0 auto',
           width: 'fit-content',

@@ -222,6 +222,7 @@ export default function ChatScreen({ isActive }: { isActive: boolean }) {
   const [recordError,    setRecordError]    = useState(false)
   const [dbgLogs,        setDbgLogs]        = useState<string[]>([])
   const [dbgVisible,     setDbgVisible]     = useState(false)
+  const [kbHeight,       setKbHeight]       = useState(0)
 
   const bottomRef        = useRef<HTMLDivElement>(null)
   const fileInputRef     = useRef<HTMLInputElement>(null)
@@ -440,6 +441,35 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
 
     initialize()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── iOS keyboard: keep the input bar pinned above the keyboard ───────────────
+
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const onChange = () => {
+      // Keyboard height = layout viewport minus the (shrunk) visual viewport.
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      const open = kb > 80
+      setKbHeight(open ? kb : 0)
+      if (open) {
+        document.body.style.setProperty('--hide-tabbar', '1')
+        autoScroll.current = true
+        requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }))
+      } else {
+        document.body.style.removeProperty('--hide-tabbar')
+      }
+    }
+
+    vv.addEventListener('resize', onChange)
+    vv.addEventListener('scroll', onChange)
+    return () => {
+      vv.removeEventListener('resize', onChange)
+      vv.removeEventListener('scroll', onChange)
+      document.body.style.removeProperty('--hide-tabbar')
+    }
+  }, [])
 
   // ── Auto-resize textarea ─────────────────────────────────────────────────────
 
@@ -1042,8 +1072,8 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
               <div ref={bottomRef} />
             </div>
 
-            <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 'min(390px, 100vw)', height: 150, background: 'linear-gradient(to top, #080810 60%, transparent)', zIndex: 55, pointerEvents: 'none' }} />
-            <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', width: 'min(calc(390px - 32px), calc(100vw - 32px))', zIndex: 60, background: 'rgba(8,8,16,0.98)', pointerEvents: 'all' }}>
+            <div style={{ position: 'fixed', bottom: kbHeight, left: '50%', transform: 'translateX(-50%)', width: 'min(390px, 100vw)', height: 150, background: 'linear-gradient(to top, #080810 60%, transparent)', zIndex: 55, pointerEvents: 'none', transition: 'bottom 0.22s ease-out' }} />
+            <div style={{ position: 'fixed', bottom: kbHeight > 0 ? kbHeight : 'calc(90px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', width: 'min(calc(390px - 32px), calc(100vw - 32px))', zIndex: 60, background: 'rgba(8,8,16,0.98)', pointerEvents: 'all', transition: 'bottom 0.22s ease-out' }}>
               <div className="atlas-listen-line" />
 
               <AnimatePresence>
@@ -1077,7 +1107,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
                       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
                     }}
                     placeholder="Ask anything..."
-                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#888', fontWeight: 300, width: '100%', fontFamily: 'Inter, sans-serif', resize: 'none', overflowY: 'hidden', lineHeight: '1.5', padding: 0, display: 'block' }}
+                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: 16, color: '#888', fontWeight: 300, width: '100%', fontFamily: 'Inter, sans-serif', resize: 'none', overflowY: 'hidden', lineHeight: '1.4', padding: 0, display: 'block' }}
                   />
                 </div>
                 <motion.button
