@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
-import { Sparkles, ChevronDown, ChevronUp, Lock, MessageCircle } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Constants ────────────────────────────────────────────
@@ -356,87 +356,93 @@ function NeonSlider({
   )
 }
 
-// ── Atlas Reflection — chat bubble revealed by a chat icon ─
-// Inner message: mounts on open so the typewriter replays each reveal.
-function ReflectionMessage({ text }: { text: string }) {
-  const words = useTypewriter(text, 70)
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 4, scale: 0.97 }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        maxWidth: '88%',
-        padding: '11px 15px',
-        borderRadius: 16,
-        borderBottomLeftRadius: 5,
-        background: 'rgba(255,255,255,0.04)',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        border: '0.5px solid rgba(255,255,255,0.07)',
-        boxShadow: '0 0 20px rgba(139,92,246,0.06)',
-      }}
-    >
-      <div style={{
-        fontSize: 13, fontWeight: 300, color: '#aaa', lineHeight: 1.55,
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
-      }}>
-        {words.map((w, i) => (
-          <motion.span
-            key={i}
-            initial={{ opacity: 0, filter: 'blur(3px)' }}
-            animate={{ opacity: 1, filter: 'blur(0px)' }}
-            transition={{ duration: 0.2 }}
-            style={{ marginRight: 4, display: 'inline-block' }}
-          >
-            {w}
-          </motion.span>
-        ))}
-      </div>
-    </motion.div>
-  )
-}
-
+// ── Atlas Reflection (typewriter + connector + collapse) ──
 function ReflectionCard({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
+  const words = useTypewriter(text, 70)
+  const [connectorDone, setConnectorDone] = useState(false)
+  const [collapsed, setCollapsed]         = useState(false)
 
   return (
-    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-      {/* Chat-bubble icon toggle (same icon as the Atlas tab) */}
-      <motion.button
-        whileTap={{ scale: 0.85 }}
-        onClick={() => setOpen(o => !o)}
-        aria-label={open ? 'Ocultar reflexión de Atlas' : 'Ver reflexión de Atlas'}
+    <div style={{ position: 'relative', marginTop: 8 }}>
+      {/* Animated connector */}
+      <svg
+        width="32" height="32"
+        style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}
+        viewBox="0 0 2 32"
+      >
+        <motion.line
+          x1="1" y1="0" x2="1" y2="32"
+          stroke="url(#connectorGrad)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          onAnimationComplete={() => setConnectorDone(true)}
+        />
+        <defs>
+          <linearGradient id="connectorGrad" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.08)" />
+            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.5" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: connectorDone ? 1 : 0, y: connectorDone ? 0 : 6 }}
+        transition={{ duration: 0.3 }}
         style={{
-          position: 'relative', background: 'none', border: 'none', cursor: 'pointer',
-          padding: 4, display: 'flex', alignItems: 'center', lineHeight: 0,
+          background: 'rgba(139,92,246,0.07)',
+          border: '0.5px solid rgba(139,92,246,0.25)',
+          borderRadius: 14, padding: 16,
+          boxShadow: '0 0 20px rgba(139,92,246,0.08)',
         }}
       >
-        {/* Subtle attention glow while closed */}
-        {!open && (
-          <motion.span
-            aria-hidden
-            animate={{ opacity: [0.25, 0.6, 0.25], scale: [1, 1.18, 1] }}
-            transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: collapsed ? 0 : 10 }}>
+          <Sparkles size={10} color="#06B6D4" />
+          <span style={{ fontSize: 10, color: '#06B6D4', letterSpacing: '1.5px' }}>ATLAS</span>
+          {/* Collapse / hide toggle */}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? 'Mostrar reflexión' : 'Ocultar reflexión'}
             style={{
-              position: 'absolute', inset: 0, borderRadius: '50%',
-              boxShadow: '0 0 10px 2px rgba(139,92,246,0.45)',
-              pointerEvents: 'none',
+              marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+              padding: 2, display: 'flex', alignItems: 'center',
             }}
-          />
-        )}
-        <MessageCircle
-          size={18}
-          strokeWidth={1.6}
-          color={open ? '#8B5CF6' : 'rgba(255,255,255,0.4)'}
-          style={{ position: 'relative' }}
-        />
-      </motion.button>
-
-      <AnimatePresence initial={false}>
-        {open && <ReflectionMessage key="reflection" text={text} />}
-      </AnimatePresence>
+          >
+            {collapsed
+              ? <ChevronDown size={14} color="rgba(255,255,255,0.3)" />
+              : <ChevronUp   size={14} color="rgba(255,255,255,0.3)" />}
+          </button>
+        </div>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75 }}>
+                {words.map((w, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ opacity: 0, filter: 'blur(3px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    transition={{ duration: 0.2 }}
+                    style={{ marginRight: 4, display: 'inline-block' }}
+                  >
+                    {w}
+                  </motion.span>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   )
 }
