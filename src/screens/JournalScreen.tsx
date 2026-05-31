@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
-import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Constants ────────────────────────────────────────────
-const CLAUDE_PROXY   = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
-const TZ             = 'Europe/Madrid'
-const INSIGHT_KEY    = 'journal_monthly_insight'
-const INSIGHT_META   = 'journal_insight_meta'
+const CLAUDE_PROXY    = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
+const TZ              = 'Europe/Madrid'
+const SUMMARY_CACHE   = 'journal_monthly_summary'   // localStorage mirror of { month, text }
+const SEEN_CACHE      = 'journal_seen_month'         // localStorage mirror of seen month key
+
+const MONTH_NAMES_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
 
 // ── Types ────────────────────────────────────────────────
 type JournalEntry = {
@@ -19,26 +24,19 @@ type JournalEntry = {
   created_at: string
 }
 
-type InsightMeta = {
-  interval: 7 | 15
-  nextDate: string  // ISO date YYYY-MM-DD
-}
-
 // ── Helpers ──────────────────────────────────────────────
 function madridTodayKey(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date())
-}
-
-function madridDisplayDate(): string {
-  return new Intl.DateTimeFormat('es-ES', {
-    timeZone: TZ, day: 'numeric', month: 'short',
-  }).format(new Date()).toUpperCase()
 }
 
 function madridCurrentTime(): string {
   return new Intl.DateTimeFormat('es-ES', {
     timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date())
+}
+
+function toLocalKey(d: Date): string {
+  return d.toLocaleDateString('en-CA')
 }
 
 function getScoreGradient(score: number): string {
@@ -91,23 +89,59 @@ function formatEntryDate(dateStr: string): string {
   })
 }
 
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
-  return d.toLocaleDateString('en-CA')
-}
-
-function diffMs(targetDateStr: string): number {
-  const target = new Date(targetDateStr + 'T00:00:00')
-  return target.getTime() - Date.now()
-}
-
 function msToCountdown(ms: number): { d: number; h: number; m: number } {
   const total = Math.max(0, Math.floor(ms / 1000))
   const d = Math.floor(total / 86400)
   const h = Math.floor((total % 86400) / 3600)
   const m = Math.floor((total % 3600) / 60)
   return { d, h, m }
+}
+
+// ── Monthly lock logic ───────────────────────────────────
+// Boundary = day 1 of a month at 08:00 LOCAL time.
+function firstOfMonth8(year: number, month0: number): Date {
+  return new Date(year, month0, 1, 8, 0, 0, 0)
+}
+
+function monthKeyFor(year: number, month0: number): string {
+  return `${year}-${String(month0 + 1).padStart(2, '0')}`
+}
+
+function monthLabelFromKey(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  return `${MONTH_NAMES_ES[m - 1]} ${y}`
+}
+
+/**
+ * Computes the monthly retrospective state relative to `now`.
+ * - endedMonthKey: the month that ended at the most recent day-1-08:00 boundary.
+ * - nextBoundary: the next day-1-08:00 (when the next month unlocks).
+ */
+function computeMonthlyState(now: Date): {
+  endedMonthKey: string
+  endedYear: number
+  endedMonth0: number
+  nextBoundary: Date
+} {
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const thisFirst8 = firstOfMonth8(y, m)
+  const passedThis = now.getTime() >= thisFirst8.getTime()
+
+  const lastBoundary = passedThis ? thisFirst8 : firstOfMonth8(y, m - 1)
+  // Month that just ended = the month immediately before the boundary's month.
+  const endedDate = new Date(lastBoundary.getFullYear(), lastBoundary.getMonth() - 1, 1)
+  const endedYear   = endedDate.getFullYear()
+  const endedMonth0 = endedDate.getMonth()
+
+  const nextBoundary = passedThis ? firstOfMonth8(y, m + 1) : thisFirst8
+
+  return {
+    endedMonthKey: monthKeyFor(endedYear, endedMonth0),
+    endedYear,
+    endedMonth0,
+    nextBoundary,
+  }
 }
 
 // ── useTypewriter ─────────────────────────────────────────
@@ -144,12 +178,13 @@ function NeonSlider({
   const capsuleRef               = useRef<HTMLDivElement>(null)
   const isDraggingRef            = useRef(false)
   const [liveValue,  setLiveValue]  = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [prevRange,  setPrevRange]  = useState<number>(-1)
+  const [, setIsDragging]           = useState(false)
+  const [, setPrevRange]            = useState<number>(-1)
 
   const displayValue = liveValue ?? score
   const pct          = displayValue === 0 ? 0 : (displayValue - 1) / 9
   const color        = displayValue === 0 ? 'rgba(255,255,255,0.25)' : getSliderColor(displayValue)
+  const glowColor    = displayValue === 0 ? 'rgba(139,92,246,0.5)' : getSliderColor(displayValue)
   const fillOpacity  = displayValue === 0 ? 0 : 0.15
   const snappedInt   = Math.round(displayValue)
   const moodWord     = getMoodWord(snappedInt)
@@ -230,70 +265,86 @@ function NeonSlider({
         </AnimatePresence>
       </div>
 
-      <div
-        ref={capsuleRef}
-        style={{
-          position: 'relative', height: 64, borderRadius: 32,
-          background: 'rgba(255,255,255,0.06)',
-          border: '0.5px solid rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(10px)',
-          overflow: 'hidden',
-          cursor: readOnly ? 'default' : 'grab',
-          touchAction: 'none', userSelect: 'none',
-        }}
-        onPointerDown={readOnly ? undefined : onDown}
-        onPointerMove={readOnly ? undefined : onMove}
-        onPointerUp={readOnly   ? undefined : onUp}
-        onPointerCancel={readOnly ? undefined : onUp}
-      >
-        {/* Fill with gradient */}
-        <motion.div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: fillW,
-          background: color, opacity: fillOpacity, borderRadius: 32,
-        }} />
+      {/* Slider + ambient indirect glow behind it */}
+      <div style={{ position: 'relative' }}>
+        {/* ── Ambient glow (soft blurred neon, like Body's calorie circle) ── */}
+        <motion.div
+          aria-hidden
+          animate={{ opacity: displayValue === 0 ? 0.22 : [0.4, 0.55, 0.4] }}
+          transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+          style={{
+            position: 'absolute', inset: '-22px 8%', borderRadius: '50%',
+            background: `radial-gradient(ellipse at center, ${glowColor} 0%, transparent 70%)`,
+            filter: 'blur(38px)',
+            pointerEvents: 'none', zIndex: 0,
+          }}
+        />
 
-        {/* Thumb with spring motion */}
-        <motion.div style={{
-          position: 'absolute',
-          left: thumbLeft,
-          top: '50%',
-          translateY: '-50%',
-          width: THUMB, height: THUMB, borderRadius: '50%',
-          background: color,
-          pointerEvents: 'none', zIndex: 2,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {/* Halo */}
-          <motion.div
-            animate={{
-              boxShadow: [
-                `0 0 16px 4px ${color}55`,
-                `0 0 28px 10px ${color}33`,
-                `0 0 16px 4px ${color}55`,
-              ],
-            }}
-            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-            style={{
-              position: 'absolute', inset: -6, borderRadius: '50%',
-              pointerEvents: 'none',
-            }}
-          />
+        <div
+          ref={capsuleRef}
+          style={{
+            position: 'relative', zIndex: 1, height: 64, borderRadius: 32,
+            background: 'rgba(255,255,255,0.06)',
+            border: '0.5px solid rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(10px)',
+            overflow: 'hidden',
+            cursor: readOnly ? 'default' : 'grab',
+            touchAction: 'none', userSelect: 'none',
+          }}
+          onPointerDown={readOnly ? undefined : onDown}
+          onPointerMove={readOnly ? undefined : onMove}
+          onPointerUp={readOnly   ? undefined : onUp}
+          onPointerCancel={readOnly ? undefined : onUp}
+        >
+          {/* Fill with gradient */}
+          <motion.div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: fillW,
+            background: color, opacity: fillOpacity, borderRadius: 32,
+          }} />
 
-          {/* Number with pop */}
-          <AnimatePresence mode="wait">
-            <motion.span
-              key={snappedInt}
-              initial={{ scale: 1.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.6, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-              style={{ fontSize: 18, fontWeight: 700, color: '#fff', lineHeight: 1, position: 'relative', zIndex: 1 }}
-            >
-              {snappedInt === 0 ? '' : snappedInt}
-            </motion.span>
-          </AnimatePresence>
-        </motion.div>
+          {/* Thumb with spring motion */}
+          <motion.div style={{
+            position: 'absolute',
+            left: thumbLeft,
+            top: '50%',
+            translateY: '-50%',
+            width: THUMB, height: THUMB, borderRadius: '50%',
+            background: color,
+            pointerEvents: 'none', zIndex: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {/* Halo */}
+            <motion.div
+              animate={{
+                boxShadow: [
+                  `0 0 16px 4px ${color}55`,
+                  `0 0 28px 10px ${color}33`,
+                  `0 0 16px 4px ${color}55`,
+                ],
+              }}
+              transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute', inset: -6, borderRadius: '50%',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Number with pop */}
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={snappedInt}
+                initial={{ scale: 1.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.6, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                style={{ fontSize: 18, fontWeight: 700, color: '#fff', lineHeight: 1, position: 'relative', zIndex: 1 }}
+              >
+                {snappedInt === 0 ? '' : snappedInt}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
+        </div>
       </div>
 
       {/* Scale labels */}
@@ -305,10 +356,11 @@ function NeonSlider({
   )
 }
 
-// ── Atlas Reflection (typewriter + connector) ─────────────
+// ── Atlas Reflection (typewriter + connector + collapse) ──
 function ReflectionCard({ text }: { text: string }) {
   const words = useTypewriter(text, 70)
   const [connectorDone, setConnectorDone] = useState(false)
+  const [collapsed, setCollapsed]         = useState(false)
 
   return (
     <div style={{ position: 'relative', marginTop: 8 }}>
@@ -348,23 +400,48 @@ function ReflectionCard({ text }: { text: string }) {
           boxShadow: '0 0 20px rgba(139,92,246,0.08)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: collapsed ? 0 : 10 }}>
           <Sparkles size={10} color="#06B6D4" />
           <span style={{ fontSize: 10, color: '#06B6D4', letterSpacing: '1.5px' }}>ATLAS</span>
+          {/* Collapse / hide toggle */}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? 'Mostrar reflexión' : 'Ocultar reflexión'}
+            style={{
+              marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+              padding: 2, display: 'flex', alignItems: 'center',
+            }}
+          >
+            {collapsed
+              ? <ChevronDown size={14} color="rgba(255,255,255,0.3)" />
+              : <ChevronUp   size={14} color="rgba(255,255,255,0.3)" />}
+          </button>
         </div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75 }}>
-          {words.map((w, i) => (
-            <motion.span
-              key={i}
-              initial={{ opacity: 0, filter: 'blur(3px)' }}
-              animate={{ opacity: 1, filter: 'blur(0px)' }}
-              transition={{ duration: 0.2 }}
-              style={{ marginRight: 4, display: 'inline-block' }}
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              style={{ overflow: 'hidden' }}
             >
-              {w}
-            </motion.span>
-          ))}
-        </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75 }}>
+                {words.map((w, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ opacity: 0, filter: 'blur(3px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    transition={{ duration: 0.2 }}
+                    style={{ marginRight: 4, display: 'inline-block' }}
+                  >
+                    {w}
+                  </motion.span>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   )
@@ -551,96 +628,56 @@ function FlipCard({ value, label }: { value: number; label: string }) {
   )
 }
 
-// ── FlipCountdown ─────────────────────────────────────────
-function FlipCountdown({
-  meta,
-  onIntervalChange,
-  onTrigger,
-  loading,
+// ── Monthly retrospective (lock + countdown + unlock) ─────
+function MonthlyInsight({
+  seenMonth, loading, onOpen,
 }: {
-  meta: InsightMeta
-  onIntervalChange: (v: 7 | 15) => void
-  onTrigger: () => void
+  seenMonth: string | null
   loading: boolean
+  onOpen: (endedYear: number, endedMonth0: number, endedMonthKey: string) => void
 }) {
-  const [countdown, setCountdown] = useState(msToCountdown(diffMs(meta.nextDate)))
+  const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    const id = setInterval(() => {
-      const ms = diffMs(meta.nextDate)
-      setCountdown(msToCountdown(ms))
-      if (ms <= 0) onTrigger()
-    }, 1000)
+    const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
-  }, [meta.nextDate, onTrigger])
+  }, [])
 
-  const { d, h, m } = countdown
-  const expired = d === 0 && h === 0 && m === 0
+  const { endedMonthKey, endedYear, endedMonth0, nextBoundary } = computeMonthlyState(now)
+  const unlocked  = endedMonthKey !== seenMonth
+  const endedName = monthLabelFromKey(endedMonthKey)
+  const { d, h, m } = msToCountdown(nextBoundary.getTime() - now.getTime())
+  const nextOpenLabel = `${nextBoundary.getDate()} de ${MONTH_NAMES_ES[nextBoundary.getMonth()]}`
 
   return (
     <div style={{ marginTop: 28 }}>
       <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.04)', marginBottom: 20 }} />
 
       {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ position: 'relative', width: 22, height: 22, flexShrink: 0 }}>
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-              style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
-              }}
-            />
-            <div style={{
-              position: 'absolute', inset: 1.5, borderRadius: '50%', background: '#080810',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Sparkles size={10} color="#fff" />
-            </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <div style={{ position: 'relative', width: 22, height: 22, flexShrink: 0 }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+            style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'conic-gradient(#8B5CF6, #06B6D4, #EC4899, #8B5CF6)',
+            }}
+          />
+          <div style={{
+            position: 'absolute', inset: 1.5, borderRadius: '50%', background: '#080810',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Sparkles size={10} color="#fff" />
           </div>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
-            Próximo insight
-          </span>
         </div>
-
-        {/* Interval toggle */}
-        <div style={{
-          display: 'flex', borderRadius: 20, overflow: 'hidden',
-          border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
-        }}>
-          {([7, 15] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => onIntervalChange(v)}
-              style={{
-                padding: '4px 10px', fontSize: 10, border: 'none', cursor: 'pointer',
-                fontFamily: 'Inter, sans-serif',
-                background: meta.interval === v ? 'rgba(139,92,246,0.25)' : 'transparent',
-                color: meta.interval === v ? '#fff' : 'rgba(255,255,255,0.3)',
-                transition: 'all 0.2s',
-              }}
-            >
-              {v}d
-            </button>
-          ))}
-        </div>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+          Retrospectiva mensual
+        </span>
       </div>
 
-      {/* Flip cards */}
-      {!expired && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-          <FlipCard value={d} label="DÍAS" />
-          <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
-          <FlipCard value={h} label="HORAS" />
-          <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
-          <FlipCard value={m} label="MIN" />
-        </div>
-      )}
-
-      {/* Loading state when expired and generating */}
-      {expired && loading && (
+      {/* ── LOADING ── */}
+      {loading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
           <div style={{ position: 'relative', width: 48, height: 48 }}>
             <motion.div
@@ -661,21 +698,56 @@ function FlipCountdown({
         </div>
       )}
 
-      {/* Manual trigger when expired */}
-      {expired && !loading && (
+      {/* ── UNLOCKED: glowing button, one shot ── */}
+      {!loading && unlocked && (
         <motion.button
           whileTap={{ scale: 0.97 }}
-          onClick={onTrigger}
+          onClick={() => onOpen(endedYear, endedMonth0, endedMonthKey)}
+          animate={{
+            boxShadow: [
+              '0 0 18px rgba(139,92,246,0.35), 0 0 36px rgba(6,182,212,0.15)',
+              '0 0 28px rgba(139,92,246,0.6), 0 0 56px rgba(6,182,212,0.3)',
+              '0 0 18px rgba(139,92,246,0.35), 0 0 36px rgba(6,182,212,0.15)',
+            ],
+          }}
+          transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
           style={{
-            width: '100%', borderRadius: 14, padding: '13px 0',
-            background: 'rgba(139,92,246,0.15)',
-            border: '0.5px solid rgba(139,92,246,0.4)',
-            color: '#fff', fontSize: 13, cursor: 'pointer',
+            width: '100%', borderRadius: 14, padding: '15px 0',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(6,182,212,0.2))',
+            border: '0.5px solid rgba(139,92,246,0.6)',
+            color: '#fff', fontSize: 14, cursor: 'pointer',
             fontFamily: 'Inter, sans-serif', fontWeight: 500,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}
         >
-          Generar insight ahora
+          <Sparkles size={15} color="#fff" />
+          Abrir retrospectiva de {endedName}
         </motion.button>
+      )}
+
+      {/* ── LOCKED: lock icon + flip countdown ── */}
+      {!loading && !unlocked && (
+        <>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            width: '100%', borderRadius: 14, padding: '12px 0', marginBottom: 18,
+            background: 'rgba(255,255,255,0.03)',
+            border: '0.5px solid rgba(255,255,255,0.08)',
+            color: 'rgba(255,255,255,0.35)', fontSize: 12,
+            fontFamily: 'Inter, sans-serif', cursor: 'default',
+          }}>
+            <Lock size={13} color="rgba(255,255,255,0.3)" />
+            Se desbloquea el {nextOpenLabel} · 08:00
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+            <FlipCard value={d} label="DÍAS" />
+            <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
+            <FlipCard value={h} label="HORAS" />
+            <div style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 }}>:</div>
+            <FlipCard value={m} label="MIN" />
+          </div>
+        </>
       )}
     </div>
   )
@@ -693,31 +765,20 @@ export default function JournalScreen() {
   const [saveError,              setSaveError]              = useState('')
   const [expandedId,             setExpandedId]             = useState<string | null>(null)
   const [notesFocused,           setNotesFocused]           = useState(false)
+  const [currentTime,            setCurrentTime]            = useState(madridCurrentTime())
+
+  // Monthly retrospective state
   const [monthlyInsight,         setMonthlyInsight]         = useState<string | null>(null)
+  const [monthlyInsightMonth,    setMonthlyInsightMonth]    = useState<string | null>(null)
   const [monthlyInsightLoading,  setMonthlyInsightLoading]  = useState(false)
   const [monthlyInsightVisible,  setMonthlyInsightVisible]  = useState(false)
-  const [currentTime,            setCurrentTime]            = useState(madridCurrentTime())
-  const [insightMeta,            setInsightMeta]            = useState<InsightMeta>(() => {
-    try {
-      const raw = localStorage.getItem(INSIGHT_META)
-      if (raw) return JSON.parse(raw) as InsightMeta
-    } catch { /* ignore */ }
-    const nextDate = addDays(madridTodayKey(), 7)
-    return { interval: 7, nextDate }
-  })
-
-  const insightAutoTriggered = useRef(false)
+  const [seenMonth,              setSeenMonth]              = useState<string | null>(null)
 
   // Update clock every minute
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(madridCurrentTime()), 60_000)
     return () => clearInterval(id)
   }, [])
-
-  // ── Persist insight meta ───────────────────────────────
-  useEffect(() => {
-    try { localStorage.setItem(INSIGHT_META, JSON.stringify(insightMeta)) } catch { /* ignore */ }
-  }, [insightMeta])
 
   // ── Load data ──────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -745,17 +806,37 @@ export default function JournalScreen() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Load cached monthly insight
+  // ── Load persisted retrospective state (localStorage mirror + Supabase truth) ──
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(INSIGHT_KEY)
-      if (!raw) return
-      const { text } = JSON.parse(raw) as { text: string }
-      if (text) {
-        setMonthlyInsight(text)
-        setMonthlyInsightVisible(true)
+      const raw = localStorage.getItem(SUMMARY_CACHE)
+      if (raw) {
+        const { month, text } = JSON.parse(raw) as { month: string; text: string }
+        if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month); setMonthlyInsightVisible(true) }
       }
+      const sm = localStorage.getItem(SEEN_CACHE)
+      if (sm) setSeenMonth(sm)
     } catch { /* ignore */ }
+
+    supabase
+      .from('user_settings')
+      .select('key, value')
+      .in('key', ['journal_seen_month', 'journal_monthly_summary'])
+      .then(({ data }) => {
+        if (!data) return
+        data.forEach(row => {
+          if (row.key === 'journal_seen_month' && row.value) {
+            setSeenMonth(row.value)
+            try { localStorage.setItem(SEEN_CACHE, row.value) } catch { /* ignore */ }
+          }
+          if (row.key === 'journal_monthly_summary' && row.value) {
+            try {
+              const { month, text } = JSON.parse(row.value) as { month: string; text: string }
+              if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month); setMonthlyInsightVisible(true) }
+            } catch { /* ignore */ }
+          }
+        })
+      })
   }, [])
 
   // ── Edit mode init ─────────────────────────────────────
@@ -851,55 +932,151 @@ export default function JournalScreen() {
     }
   }
 
-  // ── Monthly insight ────────────────────────────────────
-  const runMonthlyInsight = useCallback(async () => {
+  // ── Monthly retrospective: deep cross-data analysis ─────
+  const runMonthlyInsight = useCallback(async (ey: number, em0: number, key: string) => {
     if (monthlyInsightLoading) return
     setMonthlyInsightLoading(true)
     try {
-      const allEntries = [...(todayEntry ? [todayEntry] : []), ...history].slice(0, 30)
-      const dataStr = allEntries
-        .map(e => `${e.date}: ${e.mood}/10${e.thought1 ? ` — ${e.thought1}` : ''}`)
-        .join('\n')
+      const start = new Date(ey, em0, 1)
+      const end   = new Date(ey, em0 + 1, 1)
+      const startKey = toLocalKey(start)
+      const endKey   = toLocalKey(end)
+      const startISO = start.toISOString()
+      const endISO   = end.toISOString()
+      const endedName = monthLabelFromKey(key)
+
+      const [journalRes, mealsRes, progressRes, tasksRes, settingsRes] = await Promise.all([
+        supabase.from('journal_entries').select('*')
+          .gte('date', startKey).lt('date', endKey).order('date', { ascending: true }),
+        supabase.from('meals').select('created_at, name, calories, protein, carbs, fat')
+          .gte('created_at', startISO).lt('created_at', endISO),
+        supabase.from('progress_entries').select('*')
+          .gte('date', startKey).lt('date', endKey).order('date', { ascending: true }),
+        supabase.from('tasks').select('title, status, priority, postponed_count, created_at')
+          .gte('created_at', startISO).lt('created_at', endISO),
+        supabase.from('user_settings').select('key, value')
+          .in('key', ['goal_calories', 'goal_protein', 'goal_carbs', 'goal_fat']),
+      ])
+
+      // ── Settings / goals ──
+      const settingsMap: Record<string, number> = {}
+      ;(settingsRes.data ?? []).forEach(r => {
+        const v = parseInt(r.value, 10); if (!isNaN(v)) settingsMap[r.key] = v
+      })
+      const goalCal = settingsMap.goal_calories || 2200
+
+      // ── Journal ──
+      const jrows = (journalRes.data ?? []) as Array<Record<string, unknown>>
+      const journalStr = jrows.length
+        ? jrows.map(e => {
+            const parts = [`ánimo ${e.mood}/10`]
+            if (e.energy != null)       parts.push(`energía ${e.energy}/10`)
+            if (e.productivity != null) parts.push(`prod ${e.productivity}/10`)
+            if (e.overall != null)      parts.push(`global ${e.overall}/10`)
+            const note = String(e.thought1 ?? '').trim()
+            return `${e.date}: ${parts.join(', ')}${note ? ` — "${note}"` : ''}`
+          }).join('\n')
+        : 'Sin entradas de journal este mes.'
+
+      // ── Body: daily calorie totals + progress entries ──
+      const meals = (mealsRes.data ?? []) as Array<Record<string, number | string>>
+      const byDay: Record<string, { cal: number; p: number; c: number; f: number }> = {}
+      meals.forEach(mr => {
+        const k = toLocalKey(new Date(mr.created_at as string))
+        const o = (byDay[k] ??= { cal: 0, p: 0, c: 0, f: 0 })
+        o.cal += Number(mr.calories ?? 0)
+        o.p   += Number(mr.protein  ?? 0)
+        o.c   += Number(mr.carbs    ?? 0)
+        o.f   += Number(mr.fat      ?? 0)
+      })
+      const calDays = Object.entries(byDay).sort()
+      const daysOnTarget = calDays.filter(([, o]) => o.cal >= goalCal * 0.9 && o.cal <= goalCal * 1.1).length
+      const mealDaysStr = calDays.length
+        ? calDays.map(([d, o]) => `${d}: ${o.cal} kcal (P${o.p}/C${o.c}/G${o.f})`).join('\n') +
+          `\n→ Objetivo ${goalCal} kcal · días en rango (±10%): ${daysOnTarget}/${calDays.length}`
+        : `Sin comidas registradas. Objetivo: ${goalCal} kcal.`
+
+      const progress = (progressRes.data ?? []) as Array<Record<string, unknown>>
+      const progStr = progress.length
+        ? progress.map(p => {
+            const meas = (p.measurements ?? {}) as Record<string, number>
+            const w    = meas.body_weight
+            const prs  = ((p.prs ?? []) as Array<{ name: string; weight?: number; reps?: number }>)
+              .filter(x => x.weight || x.reps)
+              .map(x => `${x.name} ${x.weight ?? ''}kg${x.reps ? `x${x.reps}` : ''}`).join(', ')
+            return `${p.date}: ${w ? `${w}kg` : 'sin peso'}${prs ? ` | PRs: ${prs}` : ''}`
+          }).join('\n')
+        : 'Sin entradas de progreso (entrenos/medidas) este mes.'
+
+      // ── Feed: tasks done vs postponed ──
+      const tasks = (tasksRes.data ?? []) as Array<Record<string, number | string>>
+      const done       = tasks.filter(t => t.status === 'done').length
+      const postponed  = tasks.filter(t => t.status === 'postponed' || Number(t.postponed_count) > 0).length
+      const discarded  = tasks.filter(t => t.status === 'discarded').length
+      const pending    = tasks.filter(t => t.status === 'pending').length
+      const totalPost  = tasks.reduce((s, t) => s + Number(t.postponed_count ?? 0), 0)
+      const tasksStr = tasks.length
+        ? `Total ${tasks.length} tareas: hechas ${done}, pospuestas ${postponed}, descartadas ${discarded}, pendientes ${pending}. Posposiciones totales: ${totalPost}.`
+        : 'Sin tareas registradas este mes.'
+
+      const prompt =
+`Haz una RETROSPECTIVA PROFUNDA del mes de ${endedName} cruzando TODOS los datos. Nada de frases genéricas, motivacionales ni de relleno. Quiero conclusiones que solo se puedan sacar mirando estos datos concretos.
+
+Estructura tu respuesta en 3 bloques:
+1. PATRONES NO OBVIOS: correlaciones entre ánimo/energía/productividad y los entrenamientos, la alimentación o las tareas. Cita ejemplos concretos CON FECHAS.
+2. QUÉ FUNCIONÓ Y QUÉ NO: respáldalo con los números.
+3. APRENDIZAJES ACCIONABLES para el mes que viene: concretos y derivados de lo que pasó este mes.
+
+Máximo ~280 palabras. Directo.
+
+=== JOURNAL (ánimo/energía/productividad/global + notas) ===
+${journalStr}
+
+=== CUERPO (calorías diarias vs objetivo, entrenos/PRs/medidas) ===
+${mealDaysStr}
+
+PROGRESO:
+${progStr}
+
+=== TAREAS (Feed) ===
+${tasksStr}`
 
       const res = await fetch(CLAUDE_PROXY, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-opus-4-8',
-          max_tokens: 400,
-          system: 'Eres Atlas. Directo, sin rodeos, sin introducciones. Responde solo el análisis.',
-          messages: [{
-            role: 'user',
-            content: `Analiza estos datos emocionales del último mes. Dame 3 patrones que observas, qué días/situaciones me afectan más, y una recomendación concreta. Directo, sin rodeos. Máximo 150 palabras.\n\n${dataStr}`,
-          }],
+          max_tokens: 800,
+          system: 'Eres Atlas, un coach personal analítico y directo. Sin rodeos, sin frases motivacionales vacías. Responde solo el análisis.',
+          messages: [{ role: 'user', content: prompt }],
         }),
       })
       const d    = await res.json()
       const text = d.content?.[0]?.text ?? ''
+
       if (text) {
         setMonthlyInsight(text)
+        setMonthlyInsightMonth(key)
         setMonthlyInsightVisible(true)
-        try { localStorage.setItem(INSIGHT_KEY, JSON.stringify({ ts: Date.now(), text })) } catch { /* ignore */ }
-        // Reset countdown
-        setInsightMeta(prev => ({
-          ...prev,
-          nextDate: addDays(madridTodayKey(), prev.interval),
-        }))
-        insightAutoTriggered.current = false
+        setSeenMonth(key)  // mark this month as seen → re-locks, countdown to next month
+
+        const cache = JSON.stringify({ month: key, text })
+        try {
+          localStorage.setItem(SUMMARY_CACHE, cache)
+          localStorage.setItem(SEEN_CACHE, key)
+        } catch { /* ignore */ }
+
+        await Promise.all([
+          supabase.from('user_settings').upsert({ key: 'journal_seen_month', value: key }, { onConflict: 'key' }),
+          supabase.from('user_settings').upsert({ key: 'journal_monthly_summary', value: cache }, { onConflict: 'key' }),
+        ])
       }
-    } catch { /* ignore */ }
-    finally { setMonthlyInsightLoading(false) }
-  }, [monthlyInsightLoading, todayEntry, history])
-
-  const handleCountdownTrigger = useCallback(() => {
-    if (insightAutoTriggered.current) return
-    insightAutoTriggered.current = true
-    runMonthlyInsight()
-  }, [runMonthlyInsight])
-
-  const handleIntervalChange = (v: 7 | 15) => {
-    setInsightMeta({ interval: v, nextDate: addDays(madridTodayKey(), v) })
-  }
+    } catch (e) {
+      console.error('[Journal] Monthly insight error:', e)
+    } finally {
+      setMonthlyInsightLoading(false)
+    }
+  }, [monthlyInsightLoading])
 
   // ── Derived ────────────────────────────────────────────
   const showForm  = !todayEntry || editMode
@@ -908,7 +1085,7 @@ export default function JournalScreen() {
 
   // ── Render ─────────────────────────────────────────────
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', height: '100%' }}>
 
       {/* ── Depth orbs ── */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
@@ -926,21 +1103,8 @@ export default function JournalScreen() {
         }} />
       </div>
 
-      {/* ── Header ── */}
-      <div style={{ padding: '20px 20px 0', flexShrink: 0, position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 10, color: '#333', letterSpacing: '1.5px' }}>
-            {madridDisplayDate()}
-          </span>
-        </div>
-        <div style={{
-          height: 1, marginTop: 12,
-          background: 'linear-gradient(90deg, transparent, #8B5CF6, #06B6D4, #EC4899, transparent)',
-        }} />
-      </div>
-
-      {/* ── Scroll area ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 40px', position: 'relative', zIndex: 1 }}>
+      {/* ── Single scroll container (height:100% + overflowY:auto) ── */}
+      <div style={{ position: 'relative', zIndex: 1, height: '100%', overflowY: 'auto', padding: '24px 20px 40px' }}>
 
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
@@ -959,7 +1123,7 @@ export default function JournalScreen() {
             {/* ══ CHECK-IN SECTION ══ */}
 
             {showForm && (
-              <div style={{ marginTop: 40 }}>
+              <div style={{ marginTop: 16 }}>
                 {/* Question */}
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 22, fontWeight: 300, color: 'rgba(255,255,255,0.8)', letterSpacing: '-0.3px', lineHeight: 1.3 }}>
@@ -1046,7 +1210,7 @@ export default function JournalScreen() {
             {!showForm && todayEntry && (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                style={{ marginTop: 32 }}
+                style={{ marginTop: 16 }}
               >
                 {/* Read-only slider */}
                 <NeonSlider score={todayEntry.mood} readOnly />
@@ -1182,15 +1346,14 @@ export default function JournalScreen() {
               </div>
             )}
 
-            {/* ══ FLIP COUNTDOWN + INSIGHT ══ */}
-            <FlipCountdown
-              meta={insightMeta}
-              onIntervalChange={handleIntervalChange}
-              onTrigger={handleCountdownTrigger}
+            {/* ══ RETROSPECTIVA MENSUAL (candado + contador) ══ */}
+            <MonthlyInsight
+              seenMonth={seenMonth}
               loading={monthlyInsightLoading}
+              onOpen={runMonthlyInsight}
             />
 
-            {/* Insight result */}
+            {/* Resultado de la retrospectiva */}
             <AnimatePresence>
               {!monthlyInsightLoading && monthlyInsight && monthlyInsightVisible && (
                 <motion.div
@@ -1204,7 +1367,7 @@ export default function JournalScreen() {
                     borderRadius: 14, padding: 16,
                   }}>
                     <div style={{ fontSize: 9, color: '#06B6D4', letterSpacing: '1.5px', marginBottom: 10 }}>
-                      ATLAS · INSIGHT
+                      ATLAS · RETROSPECTIVA{monthlyInsightMonth ? ` · ${monthLabelFromKey(monthlyInsightMonth).toUpperCase()}` : ''}
                     </div>
                     <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
                       {monthlyInsight}
