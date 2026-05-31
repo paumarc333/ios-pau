@@ -29,9 +29,12 @@ async function makeIcon({ size, logoRatio, out }) {
   console.log(`✓ ${out} (${size}x${size}, logo ${Math.round(logoRatio * 100)}%)`)
 }
 
-// Standard icons: ~62% logo. Maskable: ~46% so the triangle stays inside the safe zone.
+// Standard ("any") icons: ~62% logo. Maskable: ~46% so the logo stays inside
+// the launcher safe zone. Provide both sizes for each purpose so Android's
+// adaptive launcher always has a maskable icon to use.
 await makeIcon({ size: 192, logoRatio: 0.62, out: 'pwa-192x192.png' })
 await makeIcon({ size: 512, logoRatio: 0.62, out: 'pwa-512x512.png' })
+await makeIcon({ size: 192, logoRatio: 0.46, out: 'maskable-192x192.png' })
 await makeIcon({ size: 512, logoRatio: 0.46, out: 'maskable-512x512.png' })
 await makeIcon({ size: 180, logoRatio: 0.6, out: 'apple-touch-icon.png' })
 
