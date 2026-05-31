@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <linearGradient id="tri-grad" gradientUnits="userSpaceOnUse" x1="10" y1="18" x2="110" y2="102">
+      <stop offset="0%"   stop-color="#8B5CF6"/>
+      <stop offset="45%"  stop-color="#06B6D4"/>
+      <stop offset="80%"  stop-color="#EC4899"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <polygon points="10,18 110,18 60,102"
+           stroke="url(#tri-grad)"
+           stroke-width="8"
+           stroke-linejoin="round"
+           fill="none"
+           filter="url(#glow)"/>
+</svg>

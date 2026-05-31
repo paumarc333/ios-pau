@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'apple-touch-icon-v3.png'],
+      includeAssets: ['logo-triangle.svg', 'apple-touch-icon.png', 'apple-touch-icon-v4.png'],
       manifest: {
         name: 'iOS Pau',
         short_name: 'Pau',

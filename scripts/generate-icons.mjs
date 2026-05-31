@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PUBLIC = resolve(__dirname, '..', 'public')
 const BG = { r: 0x08, g: 0x08, b: 0x10, alpha: 1 } // #080810
 
-const logoSvg = await readFile(resolve(PUBLIC, 'favicon.svg'))
+const logoSvg = await readFile(resolve(PUBLIC, 'logo-triangle.svg'))
 
 // Render the logo at a target inner size, then composite it centered on a solid square.
 async function makeIcon({ size, logoRatio, out }) {
@@ -39,6 +39,6 @@ await makeIcon({ size: 512, logoRatio: 0.46, out: 'maskable-512x512.png' })
 await makeIcon({ size: 180, logoRatio: 0.6, out: 'apple-touch-icon.png' })
 // Versioned copy: a brand-new URL forces iOS to refetch the icon, defeating the
 // sticky home-screen (WebClip) icon cache. Bump the suffix if it ever sticks again.
-await makeIcon({ size: 180, logoRatio: 0.6, out: 'apple-touch-icon-v3.png' })
+await makeIcon({ size: 180, logoRatio: 0.6, out: 'apple-touch-icon-v4.png' })
 
 console.log('Done.')
