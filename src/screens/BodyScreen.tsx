@@ -26,12 +26,22 @@ function localDateStr(d: Date) {
   return d.toLocaleDateString('en-CA')
 }
 
-function getMondayOfWeek(ref: Date) {
-  const d = new Date(ref)
-  const day = d.getDay()
-  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
-  d.setHours(0, 0, 0, 0)
-  return d
+// Rolling window: the last 7 calendar days (today - 6 … today), local timezone.
+// Skeleton with calories 0 — used while data loads and as the chart base.
+function lastSevenDays(): WeekDay[] {
+  const todayStr = localDateStr(new Date())
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - 6 + i)
+    const key = localDateStr(d)
+    return { date: key, calories: 0, isToday: key === todayStr }
+  })
+}
+
+// Monday-first label for a YYYY-MM-DD key (getDay: 0=Sun … 6=Sat → 0=Mon … 6=Sun)
+function dayShortLabel(dateKey: string): string {
+  return DAY_SHORT[(new Date(dateKey + 'T00:00:00').getDay() + 6) % 7]
 }
 
 // ── Modal nueva / editar entrada ──────────────────────────
@@ -874,16 +884,18 @@ export default function BodyScreen() {
   }, [])
 
   const fetchWeekData = useCallback(async () => {
-    const monday = getMondayOfWeek(new Date())
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-    sunday.setHours(23, 59, 59, 999)
+    // Rolling 7-day window (today - 6 … today), local timezone — like Journal's mood chart
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - 6)
+    const end = new Date()
+    end.setHours(23, 59, 59, 999)
 
     const { data } = await supabase
       .from('meals')
       .select('created_at, calories')
-      .gte('created_at', monday.toISOString())
-      .lte('created_at', sunday.toISOString())
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
 
     const grouped: Record<string, number> = {}
     data?.forEach(m => {
@@ -891,13 +903,10 @@ export default function BodyScreen() {
       grouped[key] = (grouped[key] ?? 0) + (m.calories ?? 0)
     })
 
-    const todayStr = localDateStr(new Date())
-    const days: WeekDay[] = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday)
-      d.setDate(monday.getDate() + i)
-      const key = localDateStr(d)
-      return { date: key, calories: grouped[key] ?? 0, isToday: key === todayStr }
-    })
+    const days: WeekDay[] = lastSevenDays().map(day => ({
+      ...day,
+      calories: grouped[day.date] ?? 0,
+    }))
 
     setWeekData(days)
   }, [])
@@ -1258,10 +1267,7 @@ export default function BodyScreen() {
             })()}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 6 }}>
-            {(weekData.length === 7
-              ? weekData
-              : Array.from({ length: 7 }, (_, i) => ({ date: String(i), calories: 0, isToday: false }))
-            ).map((day, i) => {
+            {(weekData.length === 7 ? weekData : lastSevenDays()).map((day, i) => {
               const barH = day.calories > 0
                 ? Math.max(6, Math.round((day.calories / weekMax) * BAR_MAX_H))
                 : 0
@@ -1285,7 +1291,7 @@ export default function BodyScreen() {
                     color: day.isToday ? '#555' : '#252525',
                     fontWeight: day.isToday ? 500 : 300,
                   }}>
-                    {DAY_SHORT[i]}
+                    {dayShortLabel(day.date)}
                   </span>
                 </div>
               )
