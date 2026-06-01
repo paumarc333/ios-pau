@@ -360,7 +360,7 @@ export default function FeedScreen() {
 
   // ── Render ───────────────────────────────────────────
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}>
 
       {/* ── Depth orbs ── */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
@@ -399,7 +399,7 @@ export default function FeedScreen() {
       {/* ── Content ── */}
       <div
         ref={contentRef}
-        style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 0', position: 'relative', zIndex: 1 }}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px 96px', position: 'relative', zIndex: 1 }}
       >
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
