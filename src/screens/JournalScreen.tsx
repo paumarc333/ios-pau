@@ -752,7 +752,7 @@ export default function JournalScreen() {
       supabase
         .from('journal_entries')
         .select('*')
-        .neq('date', today)
+        .lte('date', today)
         .order('date', { ascending: false })
         .limit(30),
     ])
