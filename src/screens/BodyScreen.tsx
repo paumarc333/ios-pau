@@ -842,6 +842,20 @@ export default function BodyScreen() {
   const [editingEntry, setEditingEntry] = useState<ProgressEntry | undefined>(undefined)
   const [detailEntry, setDetailEntry] = useState<ProgressEntry | null>(null)
   const [showAllMeals, setShowAllMeals] = useState(false)
+  const [selectedBar, setSelectedBar] = useState<string | null>(null)
+  const chartRef = useRef<HTMLDivElement>(null)
+
+  // Dismiss the bar tooltip when tapping outside the weekly chart
+  useEffect(() => {
+    if (!selectedBar) return
+    const onDown = (e: PointerEvent) => {
+      if (chartRef.current && !chartRef.current.contains(e.target as Node)) {
+        setSelectedBar(null)
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [selectedBar])
 
   useEffect(() => {
     supabase
@@ -1242,7 +1256,7 @@ export default function BodyScreen() {
         </div>
 
         {/* ── 5. Gráfica semanal ─────────────────────────── */}
-        <div style={{
+        <div ref={chartRef} style={{
           margin: '0 16px 40px',
           position: 'relative',
           background: 'rgba(255,255,255,0.03)',
@@ -1271,9 +1285,43 @@ export default function BodyScreen() {
               const barH = day.calories > 0
                 ? Math.max(6, Math.round((day.calories / weekMax) * BAR_MAX_H))
                 : 0
+              const isSelected = selectedBar === day.date && day.calories > 0
               return (
-                <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{ height: BAR_MAX_H, display: 'flex', alignItems: 'flex-end', width: '100%', justifyContent: 'center' }}>
+                <div
+                  key={day.date}
+                  onClick={() => setSelectedBar(prev =>
+                    day.calories > 0 && prev !== day.date ? day.date : null,
+                  )}
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    position: 'relative', zIndex: isSelected ? 3 : 1,
+                    cursor: day.calories > 0 ? 'pointer' : 'default',
+                  }}
+                >
+                  <div style={{ height: BAR_MAX_H, display: 'flex', alignItems: 'flex-end', width: '100%', justifyContent: 'center', position: 'relative' }}>
+                    <AnimatePresence>
+                      {isSelected && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8, y: 4, x: '-50%' }}
+                          animate={{ opacity: 1, scale: 1, y: 0, x: '-50%' }}
+                          exit={{ opacity: 0, scale: 0.8, y: 4, x: '-50%' }}
+                          transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                          style={{
+                            position: 'absolute', bottom: barH + 8, left: '50%',
+                            transformOrigin: 'bottom center', whiteSpace: 'nowrap',
+                            background: 'rgba(15,15,20,0.85)',
+                            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                            border: '0.5px solid rgba(255,255,255,0.12)',
+                            borderRadius: 8, padding: '4px 8px',
+                            fontSize: 11, fontWeight: 500, color: '#fff',
+                            boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+                            pointerEvents: 'none', zIndex: 10,
+                          }}
+                        >
+                          {day.calories} kcal
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                     <motion.div
                       initial={{ height: 0 }}
                       animate={{ height: barH }}
