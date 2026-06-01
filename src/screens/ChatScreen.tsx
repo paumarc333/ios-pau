@@ -742,7 +742,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 512,
           system: `Eres un extractor de tareas. Analiza el mensaje del usuario y extrae SOLO si hay tareas, eventos o recordatorios concretos. Devuelve SOLO JSON válido sin texto adicional. Si no hay tareas devuelve []`,
           messages: [{
@@ -901,18 +901,13 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
       }])
       saveMessage('ai', aiText)
 
-      const TASK_KEYWORDS = [
-        'reunión', 'reunion', 'meeting', 'recordatorio', 'tarea', 'tareas',
-        'mañana', 'manana', 'el lunes', 'el martes', 'el miércoles', 'el miercoles',
-        'el jueves', 'el viernes', 'el sábado', 'el sabado', 'el domingo',
-        'a las', 'anotado', 'guardado', 'añadido', 'anyadido', 'apuntado',
-        'cita', 'evento', 'deadline', 'entrega', 'llamada', 'appointment',
-        'esta semana', 'próxima semana', 'proxima semana', 'reminder',
+      const ATLAS_CONFIRM = [
+        'anotado', 'guardado', 'añadido', 'apuntado',
+        'lo apunto', 'he guardado', 'he anotado', 'he añadido',
+        'tarea creada', 'evento creado', 'recordatorio',
       ]
-      const wordCount = userText.trim().split(/\s+/).length
       const aiLower = aiText.toLowerCase()
-      const hasTaskSignal = TASK_KEYWORDS.some(kw => aiLower.includes(kw))
-      if (wordCount > 15 && hasTaskSignal) extractAndSaveTasks(userText, aiMsgId)
+      if (ATLAS_CONFIRM.some(kw => aiLower.includes(kw))) extractAndSaveTasks(userText, aiMsgId)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido'
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'ai', text: `Error: ${msg}`, createdAt: new Date() }])
