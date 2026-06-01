@@ -390,7 +390,7 @@ export default function FeedScreen() {
       {/* ── Content ── */}
       <div
         ref={contentRef}
-        style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px calc(80px + env(safe-area-inset-bottom))', position: 'relative', zIndex: 1 }}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '2px 16px calc(80px + env(safe-area-inset-bottom))', position: 'relative', zIndex: 1 }}
       >
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
