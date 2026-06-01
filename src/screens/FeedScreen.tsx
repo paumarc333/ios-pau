@@ -28,7 +28,7 @@ type PostponeOption = {
 type MonthCell = { key: string | null; dayNum: number; isCurrentMonth: boolean }
 
 // ── Constants ────────────────────────────────────────────
-const TZ = 'Europe/Madrid'
+export const TZ = 'Europe/Madrid'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   red: '#EF4444',
@@ -91,7 +91,7 @@ function getDayLabel(key: string): string {
 }
 
 // Convert a Madrid local datetime (year, 0-based month, day, h, min) to a UTC Date
-function madridLocalToUTC(year: number, month0: number, day: number, hour: number, min: number): Date {
+export function madridLocalToUTC(year: number, month0: number, day: number, hour: number, min: number): Date {
   // Detect Madrid UTC offset at noon on that date (handles DST automatically)
   const probeUTC = new Date(Date.UTC(year, month0, day, 12, 0, 0))
   const offsetMs =

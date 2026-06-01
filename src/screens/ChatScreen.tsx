@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, ArrowUp, Mic, Square } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { addTaskFromAtlas } from './FeedScreen'
+import { addTaskFromAtlas, madridLocalToUTC } from './FeedScreen'
 
 const CLAUDE_PROXY = 'https://ubvlsebzzdltnfvofpva.supabase.co/functions/v1/claude-proxy'
 const PAGE_SIZE = 50
@@ -747,7 +747,7 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
           system: `Eres un extractor de tareas. Analiza el mensaje del usuario y extrae SOLO si hay tareas, eventos o recordatorios concretos. Devuelve SOLO JSON válido sin texto adicional. Si no hay tareas devuelve []`,
           messages: [{
             role: 'user',
-            content: `Extrae tareas de este mensaje: '${userText.replace(/'/g, "\\'")}'\nDevuelve array JSON con este formato exacto:\n[{"title":"título corto y claro","type":"task|event|reminder","priority":"red|orange|green","scheduled_at":"ISO 8601 o null","notes":"contexto adicional o null"}]\n\nReglas de prioridad:\n- red: citas médicas, pagos, deadlines, llamadas importantes\n- orange: gym, estudiar, revisar finanzas, proyectos\n- green: rutinas, recordatorios suaves, cosas opcionales\n\nFecha actual: ${today}`,
+            content: `Extrae tareas de este mensaje: '${userText.replace(/'/g, "\\'")}'\nDevuelve array JSON con este formato exacto:\n[{"title":"título corto y claro","type":"task|event|reminder","priority":"red|orange|green","scheduled_at":"YYYY-MM-DDTHH:MM:SS o null","notes":"contexto adicional o null"}]\n\nIMPORTANTE para scheduled_at: escribe la hora local del usuario en formato YYYY-MM-DDTHH:MM:SS, SIN zona horaria, SIN Z, SIN +offset. Ejemplo: "2026-06-01T14:00:00". El sistema aplicará la zona horaria correcta.\n\nReglas de prioridad:\n- red: citas médicas, pagos, deadlines, llamadas importantes\n- orange: gym, estudiar, revisar finanzas, proyectos\n- green: rutinas, recordatorios suaves, cosas opcionales\n\nFecha y hora local actual: ${today}`,
           }],
         }),
       })
@@ -782,11 +782,25 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
       const created: Array<{ title: string; priority: 'red' | 'orange' | 'green' }> = []
       for (const task of extracted) {
         try {
+          // Normalize Haiku's scheduled_at: always treat as Madrid local time regardless
+          // of whatever offset (or no offset) the model produced, then convert to UTC.
+          let scheduledAt: string | undefined
+          if (task.scheduled_at && task.scheduled_at !== 'null') {
+            // Strip any timezone suffix (Z, +HH:MM, -HH:MM) to get the naive local part.
+            const naive = task.scheduled_at.replace(/([+-]\d{2}:\d{2}|Z)$/, '')
+            const m = naive.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+            if (m) {
+              const [, y, mo, d, h, mi] = m.map(Number)
+              scheduledAt = madridLocalToUTC(y, mo - 1, d, h, mi).toISOString()
+            } else {
+              scheduledAt = task.scheduled_at
+            }
+          }
           const payload = {
             title: task.title,
             type: task.type ?? 'task',
             priority: task.priority ?? 'orange',
-            scheduled_at: task.scheduled_at && task.scheduled_at !== 'null' ? task.scheduled_at : undefined,
+            scheduled_at: scheduledAt,
             notes: task.notes && task.notes !== 'null' ? task.notes : undefined,
           } as const
           console.log('[Feed] Llamando addTaskFromAtlas con:', payload)
