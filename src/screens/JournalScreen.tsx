@@ -1043,7 +1043,7 @@ ${tasksStr}`
 
   // ── Render ─────────────────────────────────────────────
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', height: '100%' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', height: '100%' }}>
 
       {/* ── Depth orbs ── */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
@@ -1062,7 +1062,7 @@ ${tasksStr}`
       </div>
 
       {/* ── Single scroll container (height:100% + overflowY:auto) ── */}
-      <div style={{ position: 'relative', zIndex: 1, height: '100%', overflowY: 'auto', padding: '24px 20px 40px' }}>
+      <div style={{ position: 'relative', zIndex: 1, height: '100%', overflowY: 'auto', padding: '24px 20px calc(80px + env(safe-area-inset-bottom))' }}>
 
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>

@@ -1016,7 +1016,7 @@ export default function BodyScreen() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
         {/* ── 1. Header ──────────────────────────────────── */}
         <div style={{ padding: '20px 20px 0' }}>
@@ -1295,7 +1295,7 @@ export default function BodyScreen() {
 
         {/* ── 6. Progreso ────────────────────────────────── */}
         <div style={{
-          margin: '0 16px 80px',
+          margin: '0 16px 0',
           position: 'relative',
           background: 'rgba(255,255,255,0.03)',
           backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',

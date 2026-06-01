@@ -1052,7 +1052,7 @@ export default function MarketsScreen() {
       </div>
 
       {/* ── News section ── */}
-      <div style={{ padding: '22px 16px 90px' }}>
+      <div style={{ padding: '22px 16px calc(80px + env(safe-area-inset-bottom))' }}>
         <div style={{
           position: 'relative',
           background: 'rgba(255,255,255,0.03)',
