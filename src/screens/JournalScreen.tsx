@@ -731,6 +731,8 @@ export default function JournalScreen() {
   const [monthlyInsightLoading,  setMonthlyInsightLoading]  = useState(false)
   const [monthlyInsightVisible,  setMonthlyInsightVisible]  = useState(false)
   const [seenMonth,              setSeenMonth]              = useState<string | null>(null)
+  const [summaryHistory,         setSummaryHistory]         = useState<Array<{ month: string; text: string }>>([])
+  const [openHistoryMonth,       setOpenHistoryMonth]       = useState<string | null>(null)
 
   // Update clock every minute
   useEffect(() => {
@@ -770,7 +772,7 @@ export default function JournalScreen() {
       const raw = localStorage.getItem(SUMMARY_CACHE)
       if (raw) {
         const { month, text } = JSON.parse(raw) as { month: string; text: string }
-        if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month); setMonthlyInsightVisible(true) }
+        if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month) }
       }
       const sm = localStorage.getItem(SEEN_CACHE)
       if (sm) setSeenMonth(sm)
@@ -790,10 +792,26 @@ export default function JournalScreen() {
           if (row.key === 'journal_monthly_summary' && row.value) {
             try {
               const { month, text } = JSON.parse(row.value) as { month: string; text: string }
-              if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month); setMonthlyInsightVisible(true) }
+              if (text) { setMonthlyInsight(text); setMonthlyInsightMonth(month) }
             } catch { /* ignore */ }
           }
         })
+      })
+
+    supabase
+      .from('user_settings')
+      .select('key, value')
+      .like('key', 'journal_retro_%')
+      .then(({ data }) => {
+        if (!data) return
+        const history = data
+          .map(row => {
+            try { return JSON.parse(row.value) as { month: string; text: string } }
+            catch { return null }
+          })
+          .filter((x): x is { month: string; text: string } => !!x?.month && !!x?.text)
+          .sort((a, b) => b.month.localeCompare(a.month))
+        setSummaryHistory(history)
       })
   }, [])
 
@@ -1027,7 +1045,12 @@ ${tasksStr}`
         await Promise.all([
           supabase.from('user_settings').upsert({ key: 'journal_seen_month', value: key }, { onConflict: 'key' }),
           supabase.from('user_settings').upsert({ key: 'journal_monthly_summary', value: cache }, { onConflict: 'key' }),
+          supabase.from('user_settings').upsert({ key: `journal_retro_${key}`, value: cache }, { onConflict: 'key' }),
         ])
+        setSummaryHistory(prev => {
+          const filtered = prev.filter(s => s.month !== key)
+          return [{ month: key, text }, ...filtered].sort((a, b) => b.month.localeCompare(a.month))
+        })
       }
     } catch (e) {
       console.error('[Journal] Monthly insight error:', e)
@@ -1347,6 +1370,84 @@ ${tasksStr}`
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* ══ HISTORIAL DE RETROSPECTIVAS ══ */}
+            {summaryHistory.length > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.04)', marginBottom: 20 }} />
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '1.5px', marginBottom: 14 }}>
+                  HISTORIAL · RETROSPECTIVAS
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {summaryHistory.map(({ month, text }) => {
+                    const isOpen = openHistoryMonth === month
+                    return (
+                      <div
+                        key={month}
+                        style={{
+                          background: 'rgba(139,92,246,0.04)',
+                          border: `0.5px solid ${isOpen ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                          transition: 'border-color 0.2s',
+                        }}
+                      >
+                        <button
+                          onClick={() => setOpenHistoryMonth(isOpen ? null : month)}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center',
+                            justifyContent: 'space-between', padding: '12px 14px',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontFamily: 'Inter, sans-serif',
+                          }}
+                        >
+                          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+                            {monthLabelFromKey(month)}
+                          </span>
+                          {isOpen
+                            ? <ChevronUp size={14} color="rgba(139,92,246,0.7)" />
+                            : <ChevronDown size={14} color="rgba(255,255,255,0.3)" />
+                          }
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {isOpen && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.22 }}
+                              style={{ overflow: 'hidden' }}
+                            >
+                              <div style={{
+                                padding: '0 14px 14px',
+                                borderTop: '0.5px solid rgba(139,92,246,0.1)',
+                                paddingTop: 12,
+                              }}>
+                                <div style={{ fontSize: 9, color: '#06B6D4', letterSpacing: '1.5px', marginBottom: 8 }}>
+                                  ATLAS · RETROSPECTIVA · {monthLabelFromKey(month).toUpperCase()}
+                                </div>
+                                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
+                                  {text}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {summaryHistory.length === 0 && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.04)', marginBottom: 20 }} />
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '8px 0 4px' }}>
+                  Aún no hay retrospectivas generadas
+                </div>
+              </div>
+            )}
 
           </>
         )}
