@@ -5,6 +5,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Wrap a plain string system prompt with cache_control so Anthropic caches it.
+// If system is already an array, leave it untouched.
+function injectSystemCache(body: Record<string, unknown>): Record<string, unknown> {
+  if (typeof body.system !== 'string') return body
+  return {
+    ...body,
+    system: [{ type: 'text', text: body.system, cache_control: { type: 'ephemeral' } }],
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -19,8 +29,9 @@ serve(async (req) => {
         'content-type': 'application/json',
         'x-api-key': Deno.env.get('ANTHROPIC_KEY') ?? '',
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'prompt-caching-2024-07-31',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(injectSystemCache(body)),
     })
 
     const data = await anthropicRes.json()

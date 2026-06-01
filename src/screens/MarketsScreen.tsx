@@ -835,7 +835,7 @@ export default function MarketsScreen() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          model:      'claude-opus-4-8',
+          model:      'claude-sonnet-4-6',
           max_tokens: 600,
           messages:   [{
             role:    'user',

@@ -846,7 +846,13 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
       let startIdx = 0
       while (startIdx < allMessages.length && allMessages[startIdx].role === 'ai') startIdx++
 
-      const history: ApiMessage[] = allMessages.slice(startIdx).map(m => {
+      const MAX_HISTORY = 15
+      const windowedMessages = allMessages.slice(startIdx)
+      const trimmed = windowedMessages.length > MAX_HISTORY
+        ? windowedMessages.slice(windowedMessages.length - MAX_HISTORY)
+        : windowedMessages
+
+      const history: ApiMessage[] = trimmed.map(m => {
         if (m.role === 'user' && m.image && m.image.base64) {
           return {
             role: 'user' as const,
@@ -895,7 +901,18 @@ Genera un saludo de buenos días conciso. Incluye: ${mealsLine} Si hay contexto 
       }])
       saveMessage('ai', aiText)
 
-      if (userText.trim()) extractAndSaveTasks(userText, aiMsgId)
+      const TASK_KEYWORDS = [
+        'reunión', 'reunion', 'meeting', 'recordatorio', 'tarea', 'tareas',
+        'mañana', 'manana', 'el lunes', 'el martes', 'el miércoles', 'el miercoles',
+        'el jueves', 'el viernes', 'el sábado', 'el sabado', 'el domingo',
+        'a las', 'anotado', 'guardado', 'añadido', 'anyadido', 'apuntado',
+        'cita', 'evento', 'deadline', 'entrega', 'llamada', 'appointment',
+        'esta semana', 'próxima semana', 'proxima semana', 'reminder',
+      ]
+      const wordCount = userText.trim().split(/\s+/).length
+      const aiLower = aiText.toLowerCase()
+      const hasTaskSignal = TASK_KEYWORDS.some(kw => aiLower.includes(kw))
+      if (wordCount > 15 && hasTaskSignal) extractAndSaveTasks(userText, aiMsgId)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido'
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'ai', text: `Error: ${msg}`, createdAt: new Date() }])
