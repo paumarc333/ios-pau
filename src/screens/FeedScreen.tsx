@@ -63,12 +63,6 @@ function localTodayKey(): string {
   return localKey(new Date())
 }
 
-// Add N calendar days to a YYYY-MM-DD key (pure local math, no TZ artifacts)
-function addDays(key: string, n: number): string {
-  const [y, m, d] = key.split('-').map(Number)
-  return localKey(new Date(y, m - 1, d + n))
-}
-
 // Stored UTC ISO string → LOCAL calendar date key
 function dateKey(isoStr: string): string {
   return localKey(new Date(isoStr))
@@ -198,7 +192,6 @@ export default function FeedScreen() {
   const [discardWarning, setDiscardWarning] = useState<Task | null>(null)
   const [showAdd,        setShowAdd]        = useState(false)
   const [viewMode,       setViewMode]       = useState<'list' | 'calendar'>('list')
-  const [showMore,       setShowMore]       = useState(false)
   const [calSheetDay,    setCalSheetDay]    = useState<string | null>(null)
   const [calCursor,      setCalCursor]      = useState<{ year: number; month: number }>(() => {
     const now = new Date()
@@ -312,9 +305,6 @@ export default function FeedScreen() {
   // ── Grouping (device-local time) ─────────────────────
   const todayKey = localTodayKey()
 
-  const mainDayKeys:     string[] = Array.from({ length: 16 }, (_, i) => addDays(todayKey, i))
-  const extendedDayKeys: string[] = Array.from({ length: 60 }, (_, i) => addDays(todayKey, 16 + i))
-
   const grouped: Record<string, Task[]> = {}
   const noDate:  Task[] = []
 
@@ -328,7 +318,8 @@ export default function FeedScreen() {
     }
   }
 
-  const moreCount = extendedDayKeys.reduce((n, k) => n + (grouped[k]?.length ?? 0), 0)
+  // Every day with tasks, in chronological order (YYYY-MM-DD sorts lexically) — no truncation
+  const dayKeys: string[] = Object.keys(grouped).sort()
 
   // ── Shared helpers ───────────────────────────────────
   const renderCards = (list: Task[]) =>
@@ -423,48 +414,12 @@ export default function FeedScreen() {
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
               >
-                {mainDayKeys.map(key => {
-                  const dt = grouped[key]
-                  if (!dt || dt.length === 0) return null
-                  return (
-                    <div key={key}>
-                      <DayLabel label={getDayLabel(key)} />
-                      {renderCards(dt)}
-                    </div>
-                  )
-                })}
-
-                {moreCount > 0 && !showMore && (
-                  <motion.button
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => setShowMore(true)}
-                    style={{
-                      width: '100%', marginTop: 4, marginBottom: 8,
-                      padding: '11px 0', borderRadius: 12,
-                      background: 'rgba(255,255,255,0.03)', border: '0.5px solid #1e1e1e',
-                      color: '#555', fontSize: 12, fontFamily: 'Inter, sans-serif',
-                      letterSpacing: '0.5px', cursor: 'pointer',
-                    }}
-                  >
-                    Ver más ({moreCount} {moreCount === 1 ? 'tarea' : 'tareas'})
-                  </motion.button>
-                )}
-
-                {showMore && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
-                    {extendedDayKeys.map(key => {
-                      const dt = grouped[key]
-                      if (!dt || dt.length === 0) return null
-                      return (
-                        <div key={key}>
-                          <DayLabel label={getDayLabel(key)} />
-                          {renderCards(dt)}
-                        </div>
-                      )
-                    })}
-                  </motion.div>
-                )}
+                {dayKeys.map(key => (
+                  <div key={key}>
+                    <DayLabel label={getDayLabel(key)} />
+                    {renderCards(grouped[key])}
+                  </div>
+                ))}
 
                 {noDate.length > 0 && (
                   <div>
